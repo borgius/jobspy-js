@@ -4,6 +4,7 @@ export enum Site {
   ZIP_RECRUITER = "zip_recruiter",
   GLASSDOOR = "glassdoor",
   GOOGLE = "google",
+  GOOGLE_CAREERS = "google_careers",
   BAYT = "bayt",
   NAUKRI = "naukri",
   BDJOBS = "bdjobs",

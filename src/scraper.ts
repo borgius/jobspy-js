@@ -16,6 +16,7 @@ import { Indeed } from "./scrapers/indeed";
 import { LinkedIn } from "./scrapers/linkedin";
 import { Glassdoor } from "./scrapers/glassdoor";
 import { Google } from "./scrapers/google";
+import { GoogleCareers } from "./scrapers/google-careers";
 import { ZipRecruiter } from "./scrapers/ziprecruiter";
 import { Bayt } from "./scrapers/bayt";
 import { Naukri } from "./scrapers/naukri";
@@ -27,6 +28,7 @@ const SCRAPER_MAP: Record<Site, new (opts: { proxies?: string | string[] | null 
   [Site.LINKEDIN]: LinkedIn,
   [Site.GLASSDOOR]: Glassdoor,
   [Site.GOOGLE]: Google,
+  [Site.GOOGLE_CAREERS]: GoogleCareers,
   [Site.ZIP_RECRUITER]: ZipRecruiter,
   [Site.BAYT]: Bayt,
   [Site.NAUKRI]: Naukri,

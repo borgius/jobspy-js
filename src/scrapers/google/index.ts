@@ -1,5 +1,5 @@
+import { chromium, type Browser, type Page } from "playwright";
 import { Scraper } from "../base";
-import { HEADERS_INITIAL, HEADERS_JOBS } from "./constants";
 import {
   type JobPost,
   type JobResponse,
@@ -22,58 +22,85 @@ export class Google extends Scraper {
   private scraper_input!: ScraperInput;
   private seenUrls = new Set<string>();
   private jobsPerPage = 10;
+  private browser: Browser | null = null;
+  private pw_page: Page | null = null;
 
   constructor(options: { proxies?: string | string[] | null } = {}) {
     super(Site.GOOGLE, options);
   }
 
   async scrape(input: ScraperInput): Promise<JobResponse> {
-    await this.initSession();
     this.scraper_input = {
       ...input,
       results_wanted: Math.min(900, input.results_wanted ?? 15),
     };
     this.seenUrls.clear();
 
-    const [forwardCursor, initialJobs] = await this.getInitialCursorAndJobs();
-    const jobList = [...initialJobs];
+    try {
+      this.browser = await chromium.launch({
+        headless: true,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-blink-features=AutomationControlled",
+        ],
+      });
+      const proxy = this.proxyRotator.next();
+      const context = await this.browser.newContext({
+        viewport: { width: 1920, height: 1080 },
+        locale: "en-US",
+        userAgent:
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
+          "AppleWebKit/537.36 (KHTML, like Gecko) " +
+          "Chrome/130.0.0.0 Safari/537.36",
+        extraHTTPHeaders: { "accept-language": "en-US,en;q=0.9" },
+        proxy: proxy ? { server: proxy } : undefined,
+      });
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+      });
+      this.pw_page = await context.newPage();
 
-    if (!forwardCursor) {
-      log.warn(
-        "initial cursor not found, try changing your query or there was at most 10 results",
-      );
-      await this.close();
-      return { jobs: jobList };
-    }
+      const [forwardCursor, initialJobs] = await this.getInitialCursorAndJobs();
+      const jobList = [...initialJobs];
 
-    let cursor: string | null = forwardCursor;
-    let page = 1;
-    const offset = this.scraper_input.offset ?? 0;
-    const resultsWanted = this.scraper_input.results_wanted!;
+      if (!forwardCursor) {
+        log.warn(
+          "initial cursor not found, try changing your query or there was at most 10 results",
+        );
+        return { jobs: jobList };
+      }
 
-    while (this.seenUrls.size < resultsWanted + offset && cursor) {
-      log.info(
-        `search page: ${page} / ${Math.ceil(resultsWanted / this.jobsPerPage)}`,
-      );
-      try {
-        const [jobs, nextCursor] = await this.getJobsNextPage(cursor);
-        if (!jobs.length) {
-          log.info(`found no jobs on page: ${page}`);
+      let cursor: string | null = forwardCursor;
+      let page = 1;
+      const offset = this.scraper_input.offset ?? 0;
+      const resultsWanted = this.scraper_input.results_wanted!;
+
+      while (this.seenUrls.size < resultsWanted + offset && cursor) {
+        log.info(
+          `search page: ${page} / ${Math.ceil(resultsWanted / this.jobsPerPage)}`,
+        );
+        try {
+          const [jobs, nextCursor] = await this.getJobsNextPage(cursor);
+          if (!jobs.length) {
+            log.info(`found no jobs on page: ${page}`);
+            break;
+          }
+          jobList.push(...jobs);
+          cursor = nextCursor;
+          page++;
+        } catch (e: any) {
+          log.error(`failed to get jobs on page: ${page}, ${e.message}`);
           break;
         }
-        jobList.push(...jobs);
-        cursor = nextCursor;
-        page++;
-      } catch (e: any) {
-        log.error(`failed to get jobs on page: ${page}, ${e.message}`);
-        break;
       }
-    }
 
-    await this.close();
-    return {
-      jobs: jobList.slice(offset, offset + resultsWanted),
-    };
+      return { jobs: jobList.slice(offset, offset + resultsWanted) };
+    } finally {
+      await this.browser?.close();
+      this.browser = null;
+      this.pw_page = null;
+    }
   }
 
   private async getInitialCursorAndJobs(): Promise<
@@ -108,8 +135,8 @@ export class Google extends Scraper {
     }
 
     const url = `${this.searchUrl}?q=${encodeURIComponent(query)}&udm=8`;
-    const res = await this.session.fetch(url, { headers: HEADERS_INITIAL });
-    const html = await res.text();
+    await this.pw_page!.goto(url, { waitUntil: "networkidle", timeout: 30_000 });
+    const html = await this.pw_page!.content();
 
     // Extract cursor
     const fcMatch = /data-async-fc="([^"]+)"/.exec(html);
@@ -123,9 +150,10 @@ export class Google extends Scraper {
   private findInitialJobs(html: string): JobPost[] {
     const pattern = /520084652":(\[.*?\]\s*])\s*}\s*]\s*]\s*]\s*]\s*]/g;
     const results: JobPost[] = [];
-    let match: RegExpExecArray | null;
 
-    while ((match = pattern.exec(html)) !== null) {
+    for (;;) {
+      const match = pattern.exec(html);
+      if (!match) break;
       try {
         const parsed = JSON.parse(match[1]);
         const job = this.parseJob(parsed);
@@ -145,11 +173,12 @@ export class Google extends Scraper {
       fcv: "3",
       async: "_fmt:prog",
     });
-    const res = await this.session.fetch(
+    const response = await this.pw_page!.goto(
       `${this.jobsUrl}?${params}`,
-      { headers: HEADERS_JOBS },
+      { waitUntil: "commit", timeout: 30_000 },
     );
-    const text = await res.text();
+    if (!response?.ok()) return [[], null];
+    const text = await response.text();
     return this.parseJobs(text);
   }
 
@@ -230,7 +259,7 @@ export class Google extends Scraper {
         const m = /\d+/.exec(daysAgoStr);
         if (m) {
           const d = new Date();
-          d.setDate(d.getDate() - parseInt(m[0]));
+          d.setDate(d.getDate() - parseInt(m[0], 10));
           datePosted = d.toISOString().split("T")[0];
         }
       }

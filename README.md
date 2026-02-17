@@ -1,12 +1,12 @@
 # jobspy-js
 
-TypeScript port of [JobSpy](https://github.com/speedyapply/JobSpy) — scrape job postings from LinkedIn, Indeed, Glassdoor, Google, ZipRecruiter, Bayt, Naukri & BDJobs.
+TypeScript port of [JobSpy](https://github.com/speedyapply/JobSpy) — scrape job postings from LinkedIn, Indeed, Glassdoor, Google Jobs, Google Careers, ZipRecruiter, Bayt, Naukri & BDJobs.
 
 Uses [wreq-js](https://github.com/nicehash/wreq-js) for browser TLS fingerprint emulation (Chrome/Firefox/Safari).
 
 ## Features
 
-- **8 job boards** — LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter, Bayt, Naukri, BDJobs
+- **9 job boards** — LinkedIn, Indeed, Glassdoor, Google Jobs, Google Careers, ZipRecruiter, Bayt, Naukri, BDJobs
 - **3 interfaces** — SDK, CLI, MCP server
 - **Browser emulation** — wreq-js with full TLS fingerprinting (JA3/JA4)
 - **Proxy rotation** — built-in rotating proxy support
@@ -14,11 +14,30 @@ Uses [wreq-js](https://github.com/nicehash/wreq-js) for browser TLS fingerprint 
 - **Salary extraction** — parses compensation from descriptions when not provided directly
 - **60+ countries** — Indeed/Glassdoor regional domain support
 
+## Supported Sites
+
+| Site | Key | Notes |
+|------|-----|-------|
+| LinkedIn | `linkedin` | HTML scraping |
+| Indeed | `indeed` | GraphQL API |
+| Glassdoor | `glassdoor` | GraphQL API |
+| Google Jobs | `google` | Playwright (headless Chrome); requires clean residential IP or proxy |
+| Google Careers | `google_careers` | Plain HTTP; scrapes jobs at Google the company |
+| ZipRecruiter | `zip_recruiter` | Web scraping |
+| Bayt | `bayt` | HTML scraping |
+| Naukri | `naukri` | REST API |
+| BDJobs | `bdjobs` | REST API |
+
 ## Installation
 
 ```bash
 npm install jobspy-js
 ```
+
+> **Google Jobs** (`google`) uses [Playwright](https://playwright.dev) to execute JavaScript. After installing, run:
+> ```bash
+> npx playwright install chromium
+> ```
 
 ## SDK Usage
 
@@ -67,6 +86,9 @@ npx jobspy -s linkedin indeed -q "typescript" -r -o results.json
 
 # CSV output
 npx jobspy -s indeed -q "python" -o jobs.csv
+
+# Google Careers (jobs at Google)
+npx jobspy -s google_careers -q "software engineer" -l "USA" -n 10
 ```
 
 Run `npx jobspy --help` for all options.
@@ -123,11 +145,12 @@ src/
     ├── indeed/           # GraphQL API
     ├── linkedin/         # HTML scraping
     ├── glassdoor/        # GraphQL API
-    ├── google/           # HTML + JSON parsing
-    ├── ziprecruiter/     # REST API
+    ├── google/           # Playwright headless Chrome
+    ├── google-careers/   # Plain HTTP; AF_initDataCallback JSON parsing
+    ├── ziprecruiter/     # Web scraping
     ├── bayt/             # HTML scraping
     ├── naukri/           # REST API
-    └── bdjobs/           # HTML scraping
+    └── bdjobs/           # REST API
 ```
 
 ## License

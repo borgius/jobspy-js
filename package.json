@@ -46,6 +46,9 @@
     "@modelcontextprotocol/sdk": "^1.0.0",
     "cheerio": "^1.0.0",
     "commander": "^13.1.0",
+    "playwright": "^1.58.2",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "turndown": "^7.2.0",
     "wreq-js": "^2.0.1",
     "zod": "^4.3.6"
