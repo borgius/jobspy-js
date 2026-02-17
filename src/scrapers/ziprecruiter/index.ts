@@ -1,6 +1,5 @@
 import * as cheerio from "cheerio";
 import { Scraper } from "../base";
-import { HEADERS, COOKIE_DATA } from "./constants";
 import {
   type JobPost,
   type JobResponse,
@@ -8,7 +7,6 @@ import {
   type Compensation,
   type Location,
   Site,
-  JobType,
   DescriptionFormat,
   getJobTypeFromString,
   getCountry,
@@ -17,16 +15,39 @@ import {
   createLogger,
   markdownConverter,
   extractEmails,
-  removeAttributes,
   sleep,
 } from "../../utils";
 
 const log = createLogger("ZipRecruiter");
 
+const WEB_HEADERS: Record<string, string> = {
+  "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+  "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "accept-language": "en-US,en;q=0.9",
+  "sec-fetch-dest": "document",
+  "sec-fetch-mode": "navigate",
+};
+
+// ZipRecruiter pay interval numeric codes
+const PAY_INTERVAL_MAP: Record<number, string> = {
+  1: "hourly",
+  2: "daily",
+  3: "weekly",
+  4: "monthly",
+  5: "yearly",
+};
+
+// ZipRecruiter employment type numeric codes
+const EMPLOYMENT_TYPE_MAP: Record<number, string> = {
+  1: "fulltime",
+  2: "parttime",
+  3: "contract",
+  4: "internship",
+  5: "temporary",
+};
+
 export class ZipRecruiter extends Scraper {
   private baseUrl = "https://www.ziprecruiter.com";
-  private apiUrl = "https://api.ziprecruiter.com";
-  private delay = 5;
   private jobsPerPage = 20;
   private seenUrls = new Set<string>();
   private scraper_input!: ScraperInput;
@@ -36,31 +57,26 @@ export class ZipRecruiter extends Scraper {
   }
 
   async scrape(input: ScraperInput): Promise<JobResponse> {
-    await this.initSession();
+    await this.initSession("chrome_130");
     this.scraper_input = input;
     this.seenUrls.clear();
 
-    // Initialize cookies
-    await this.getCookies();
-
     const jobList: JobPost[] = [];
-    let continueToken: string | null = null;
     const resultsWanted = input.results_wanted ?? 15;
     const maxPages = Math.ceil(resultsWanted / this.jobsPerPage);
 
     for (let page = 1; page <= maxPages; page++) {
       if (jobList.length >= resultsWanted) break;
-      if (page > 1) await sleep(this.delay * 1000);
+      if (page > 1) await sleep(2000);
       log.info(`search page: ${page} / ${maxPages}`);
 
-      const [jobs, nextToken] = await this.findJobsInPage(input, continueToken);
+      const [jobs, hasMore] = await this.findJobsInPage(input, page);
       if (jobs.length) {
         jobList.push(...jobs);
       } else {
         break;
       }
-      continueToken = nextToken;
-      if (!continueToken) break;
+      if (!hasMore) break;
     }
 
     await this.close();
@@ -69,173 +85,140 @@ export class ZipRecruiter extends Scraper {
 
   private async findJobsInPage(
     input: ScraperInput,
-    continueToken: string | null,
-  ): Promise<[JobPost[], string | null]> {
-    const params = this.buildParams(input);
-    if (continueToken) params.set("continue_from", continueToken);
-
+    page: number,
+  ): Promise<[JobPost[], boolean]> {
+    const url = this.buildUrl(input, page);
     try {
-      const res = await this.session.fetch(
-        `${this.apiUrl}/jobs-app/jobs?${params}`,
-        { headers: HEADERS },
-      );
+      const res = await this.session.fetch(url, { headers: WEB_HEADERS });
       if (!res.ok) {
-        if (res.status === 429) {
-          log.error("429 Response - Blocked by ZipRecruiter for too many requests");
-        } else {
-          log.error(`ZipRecruiter response status code ${res.status}`);
-        }
-        return [[], null];
+        log.error(`ZipRecruiter response status ${res.status} for page ${page}`);
+        return [[], false];
       }
 
-      const data = (await res.json()) as any;
-      const jobsRaw = data.jobs ?? [];
-      const nextToken = data.continue ?? null;
+      const html = await res.text();
+      const $ = cheerio.load(html);
+      const raw = $('script[type="application/json"]').first().text();
+      if (!raw) {
+        log.error("No JSON data found in ZipRecruiter page");
+        return [[], false];
+      }
 
-      const jobs = await Promise.all(
-        jobsRaw.map((j: any) => this.processJob(j)),
-      );
-      return [jobs.filter(Boolean) as JobPost[], nextToken];
+      const data = JSON.parse(raw) as any;
+      const jobCards: any[] = data.hydrateJobCardsResponse?.jobCards ?? [];
+      const currentPage: number = data.page ?? page;
+      const maxPages: number = data.maxPages ?? 1;
+
+      // For page 1, also grab the full description of the first job
+      const firstJobDetails = page === 1 ? data.getJobDetailsResponse?.jobDetails : null;
+
+      const jobs: JobPost[] = [];
+      for (let i = 0; i < jobCards.length; i++) {
+        const card = jobCards[i];
+        const fullDesc = (i === 0 && firstJobDetails?.listingKey === card.listingKey)
+          ? firstJobDetails?.htmlFullDescription
+          : undefined;
+        const job = this.processCard(card, fullDesc);
+        if (job) jobs.push(job);
+      }
+
+      return [jobs, currentPage < maxPages];
     } catch (e: any) {
-      log.error(`ZipRecruiter: ${e.message}`);
-      return [[], null];
+      log.error(`ZipRecruiter page ${page}: ${e.message}`);
+      return [[], false];
     }
   }
 
-  private buildParams(input: ScraperInput): URLSearchParams {
+  private buildUrl(input: ScraperInput, page: number): string {
     const params = new URLSearchParams();
     if (input.search_term) params.set("search", input.search_term);
     if (input.location) params.set("location", input.location);
     if (input.hours_old) {
-      params.set("days", String(Math.max(Math.floor(input.hours_old / 24), 1)));
+      params.set("days_ago", String(Math.max(Math.floor(input.hours_old / 24), 1)));
     }
-    if (input.job_type) {
-      const map: Record<string, string> = {
-        [JobType.FULL_TIME]: "full_time",
-        [JobType.PART_TIME]: "part_time",
-      };
-      params.set("employment_type", map[input.job_type] ?? input.job_type);
-    }
-    if (input.easy_apply) params.set("zipapply", "1");
     if (input.is_remote) params.set("remote", "1");
     if (input.distance) params.set("radius", String(input.distance));
-    return params;
+
+    if (page === 1) {
+      // First page uses candidate/search
+      return `${this.baseUrl}/candidate/search?${params}`;
+    } else {
+      // Subsequent pages use jobs-search with page param
+      params.set("page", String(page));
+      return `${this.baseUrl}/jobs-search?${params}`;
+    }
   }
 
-  private async processJob(job: any): Promise<JobPost | null> {
-    const title = job.name;
-    const jobUrl = `${this.baseUrl}/jobs//j?lvk=${job.listing_key}`;
+  private processCard(card: any, fullDescription?: string): JobPost | null {
+    const listingKey: string = card.listingKey;
+    if (!listingKey) return null;
+
+    const jobUrl = card.rawCanonicalZipJobPageUrl
+      ? `${this.baseUrl}${card.rawCanonicalZipJobPageUrl}`
+      : `${this.baseUrl}/jobs//j?lvk=${listingKey}`;
+
     if (this.seenUrls.has(jobUrl)) return null;
     this.seenUrls.add(jobUrl);
 
-    let description = (job.job_description ?? "").trim();
-    const listingType = job.buyer_type ?? "";
-    if (this.scraper_input.description_format === DescriptionFormat.MARKDOWN) {
+    const title: string = card.title ?? "";
+    const companyName: string = card.company?.name ?? "";
+
+    // Location
+    const locData = card.location ?? {};
+    const countryCode: string = locData.countryCode ?? "US";
+    const countryValue = countryCode === "CA" ? "canada" : "usa";
+    const countryEnum = getCountry(countryValue);
+    const location: Location = {
+      city: locData.city,
+      state: locData.stateCode ?? locData.state,
+      country: countryEnum?.name ?? countryCode,
+    };
+
+    // Job type
+    const empTypeNum: number = card.employmentTypes?.[0]?.name ?? 0;
+    const empTypeStr = EMPLOYMENT_TYPE_MAP[empTypeNum];
+    const jobType = empTypeStr ? getJobTypeFromString(empTypeStr) : null;
+
+    // Date posted
+    const datePosted = card.status?.postedAtUtc
+      ? new Date(card.status.postedAtUtc).toISOString().split("T")[0]
+      : undefined;
+
+    // Compensation
+    const pay = card.pay ?? {};
+    const intervalNum: number = pay.interval ?? 0;
+    const interval = PAY_INTERVAL_MAP[intervalNum];
+    const compensation: Compensation = {
+      interval,
+      min_amount: pay.min != null ? Math.floor(pay.min) : undefined,
+      max_amount: pay.max != null ? Math.floor(pay.max) : undefined,
+      currency: "USD",
+    };
+
+    // Description
+    let description = fullDescription ?? card.shortDescription ?? "";
+    if (
+      description &&
+      this.scraper_input.description_format === DescriptionFormat.MARKDOWN
+    ) {
       description = markdownConverter(description) ?? description;
     }
 
-    const company = job.hiring_company?.name;
-    const countryValue = job.job_country === "US" ? "usa" : "canada";
-    const countryEnum = getCountry(countryValue);
-
-    const location: Location = {
-      city: job.job_city,
-      state: job.job_state,
-      country: countryEnum.name,
-    };
-
-    const empType = (job.employment_type ?? "").replace(/_/g, "").toLowerCase();
-    const jobType = getJobTypeFromString(empType);
-
-    const datePosted = job.posted_time
-      ? new Date(job.posted_time).toISOString().split("T")[0]
-      : undefined;
-
-    let compInterval = job.compensation_interval;
-    if (compInterval === "annual") compInterval = "yearly";
-
-    const compensation: Compensation = {
-      interval: compInterval,
-      min_amount: job.compensation_min != null ? Math.floor(job.compensation_min) : undefined,
-      max_amount: job.compensation_max != null ? Math.floor(job.compensation_max) : undefined,
-      currency: job.compensation_currency,
-    };
-
-    // Fetch full description
-    const [descFull, jobUrlDirect] = await this.getDescription(jobUrl);
+    // Direct apply URL
+    const jobUrlDirect: string | undefined =
+      card.applyButtonConfig?.externalApplyUrl || undefined;
 
     return {
-      id: `zr-${job.listing_key}`,
+      id: `zr-${listingKey}`,
       title,
-      company_name: company,
+      company_name: companyName,
       location,
       job_type: jobType ? [jobType] : undefined,
       compensation,
       date_posted: datePosted,
       job_url: jobUrl,
-      description: descFull ?? description,
+      description: description || undefined,
       emails: extractEmails(description),
       job_url_direct: jobUrlDirect,
-      listing_type: listingType,
     };
-  }
-
-  private async getDescription(
-    jobUrl: string,
-  ): Promise<[string | undefined, string | undefined]> {
-    try {
-      const res = await this.session.fetch(jobUrl, { headers: HEADERS });
-      if (!res.ok) return [undefined, undefined];
-
-      const html = await res.text();
-      const $ = cheerio.load(html);
-
-      const jobDesc = $("div.job_description");
-      const companyDesc = $("section.company_description");
-
-      let descFull = "";
-      if (jobDesc.length) {
-        descFull += removeAttributes(jobDesc.html()!);
-      }
-      if (companyDesc.length) {
-        descFull += removeAttributes(companyDesc.html()!);
-      }
-
-      let jobUrlDirect: string | undefined;
-      try {
-        const scriptTag = $('script[type="application/json"]');
-        if (scriptTag.length) {
-          const json = JSON.parse(scriptTag.text());
-          const saveUrl = json?.model?.saveJobURL ?? "";
-          const m = /job_url=(.+)/.exec(saveUrl);
-          if (m) jobUrlDirect = m[1];
-        }
-      } catch {
-        // ignore
-      }
-
-      if (
-        descFull &&
-        this.scraper_input.description_format === DescriptionFormat.MARKDOWN
-      ) {
-        descFull = markdownConverter(descFull) ?? descFull;
-      }
-
-      return [descFull || undefined, jobUrlDirect];
-    } catch {
-      return [undefined, undefined];
-    }
-  }
-
-  private async getCookies() {
-    try {
-      await this.session.fetch(`${this.apiUrl}/jobs-app/event`, {
-        method: "POST",
-        headers: HEADERS,
-        body: COOKIE_DATA.toString(),
-      });
-    } catch {
-      // ignore cookie errors
-    }
   }
 }

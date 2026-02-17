@@ -32,7 +32,7 @@ export class Indeed extends Scraper {
   }
 
   async scrape(input: ScraperInput): Promise<JobResponse> {
-    await this.initSession();
+    await this.initSession("safari_ios_16.5");
     this.scraper_input = input;
     const country = input.country;
     if (!country) throw new Error("Country required for Indeed");

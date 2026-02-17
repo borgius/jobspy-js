@@ -1,5 +1,5 @@
 export const JOB_SEARCH_QUERY = `
-    query GetJobData {{
+    query GetJobData {
         jobSearch(
         {what}
         {location}
@@ -7,68 +7,68 @@ export const JOB_SEARCH_QUERY = `
         {cursor}
         sort: RELEVANCE
         {filters}
-        ) {{
-        pageInfo {{
+        ) {
+        pageInfo {
             nextCursor
-        }}
-        results {{
+        }
+        results {
             trackingKey
-            job {{
-            source {{
+            job {
+            source {
                 name
-            }}
+            }
             key
             title
             datePublished
             dateOnIndeed
-            description {{
+            description {
                 html
-            }}
-            location {{
+            }
+            location {
                 countryName
                 countryCode
                 admin1Code
                 city
                 postalCode
                 streetAddress
-                formatted {{
+                formatted {
                 short
                 long
-                }}
-            }}
-            compensation {{
-                estimated {{
+                }
+            }
+            compensation {
+                estimated {
                 currencyCode
-                baseSalary {{
+                baseSalary {
                     unitOfWork
-                    range {{
-                    ... on Range {{
+                    range {
+                    ... on Range {
                         min
                         max
-                    }}
-                    }}
-                }}
-                }}
-                baseSalary {{
+                    }
+                    }
+                }
+                }
+                baseSalary {
                 unitOfWork
-                range {{
-                    ... on Range {{
+                range {
+                    ... on Range {
                     min
                     max
-                    }}
-                }}
-                }}
+                    }
+                }
+                }
                 currencyCode
-            }}
-            attributes {{
+            }
+            attributes {
                 key
                 label
-            }}
-            employer {{
+            }
+            employer {
                 relativeCompanyPageUrl
                 name
-                dossier {{
-                    employerDetails {{
+                dossier {
+                    employerDetails {
                     addresses
                     industry
                     employeesLocalizedLabel
@@ -76,25 +76,25 @@ export const JOB_SEARCH_QUERY = `
                     briefDescription
                     ceoName
                     ceoPhotoUrl
-                    }}
-                    images {{
+                    }
+                    images {
                         headerImageUrl
                         squareLogoUrl
-                    }}
-                    links {{
+                    }
+                    links {
                     corporateWebsite
-                }}
-                }}
-            }}
-            recruit {{
+                }
+                }
+            }
+            recruit {
                 viewJobUrl
                 detailedSalary
                 workSchedule
-            }}
-            }}
-        }}
-        }}
-    }}
+            }
+            }
+        }
+        }
+    }
     `;
 
 export const API_HEADERS: Record<string, string> = {

@@ -90,6 +90,7 @@ export interface CreateHttpSessionOptions {
   proxies?: string | string[] | null;
   browser?: string;
   os?: string;
+  insecure?: boolean;
 }
 
 export async function createHttpSession(
@@ -101,6 +102,7 @@ export async function createHttpSession(
     browser: (opts.browser as any) ?? "chrome_131",
     os: (opts.os as any) ?? "macos",
     ...(proxy ? { proxy } : {}),
+    ...(opts.insecure ? { insecure: true } : {}),
   });
 }
 

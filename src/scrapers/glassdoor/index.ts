@@ -31,7 +31,7 @@ export class Glassdoor extends Scraper {
   }
 
   async scrape(input: ScraperInput): Promise<JobResponse> {
-    await this.initSession();
+    await this.initSession("chrome_138");
     this.scraper_input = { ...input, results_wanted: Math.min(900, input.results_wanted ?? 15) };
     const country = input.country;
     if (!country?.glassdoor_domain) {
@@ -40,22 +40,24 @@ export class Glassdoor extends Scraper {
     this.baseUrl = `https://${country.glassdoor_domain}/`;
     this.seenUrls.clear();
 
-    const token = await this.getCsrfToken();
-    const headers = {
-      ...HEADERS,
-      "gd-csrf-token": token ?? FALLBACK_TOKEN,
-    };
-
+    // Do location lookup first — it sets/updates the bs session cookie.
+    // CSRF token must be fetched AFTER so the session cookie state is settled.
     const [locationId, locationType] = await this.getLocation(
       input.location,
       !!input.is_remote,
-      headers,
+      HEADERS,
     );
     if (!locationType) {
       log.error("location not parsed");
       await this.close();
       return { jobs: [] };
     }
+
+    const token = await this.getCsrfToken();
+    const headers = {
+      ...HEADERS,
+      "gd-csrf-token": token ?? FALLBACK_TOKEN,
+    };
 
     const jobList: JobPost[] = [];
     let cursor: string | null = null;
@@ -90,13 +92,29 @@ export class Glassdoor extends Scraper {
   }
 
   private async getCsrfToken(): Promise<string | null> {
+    // Glassdoor embeds the CSRF token as `"token": "..."` in the HTML of any page.
+    // The token has the format xxx:yyy:zzz and must be sent as gd-csrf-token on API calls.
+    // We must use browser-style navigation headers (Accept: text/html) so the server
+    // returns a full HTML document containing the embedded JSON with the token.
+    const browserHeaders = {
+      "user-agent": HEADERS["user-agent"],
+      accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+      "accept-language": "en-US,en;q=0.9",
+      "sec-ch-ua": HEADERS["sec-ch-ua"],
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"macOS"',
+      "sec-fetch-dest": "document",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-site": "none",
+      "sec-fetch-user": "?1",
+      "upgrade-insecure-requests": "1",
+    };
     try {
-      const res = await this.session.fetch(
-        `${this.baseUrl}Job/computer-science-jobs.htm`,
-      );
+      const res = await this.session.fetch(this.baseUrl, { headers: browserHeaders });
       const text = await res.text();
-      const match = /"token":\s*"([^"]+)"/.exec(text);
-      return match?.[1] ?? null;
+      const htmlMatch = /"token":\s*"([^"]{20,})"/.exec(text);
+      if (htmlMatch?.[1]) return htmlMatch[1];
+      return null;
     } catch {
       return null;
     }

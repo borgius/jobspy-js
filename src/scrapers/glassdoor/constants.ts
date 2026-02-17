@@ -8,7 +8,7 @@ export const HEADERS: Record<string, string> = {
   origin: "https://www.glassdoor.com",
   referer: "https://www.glassdoor.com/",
   "sec-ch-ua":
-    '"Chromium";v="118", "Google Chrome";v="118", "Not=A?Brand";v="99"',
+    '"Chromium";v="138", "Google Chrome";v="138", "Not-A.Brand";v="8"',
   "sec-ch-ua-mobile": "?0",
   "sec-ch-ua-platform": '"macOS"',
   "sec-fetch-dest": "empty",
@@ -53,29 +53,7 @@ export const QUERY_TEMPLATE = `
       }
     ) {
       jobListings {
-        jobview {
-          header {
-            adOrderId
-            advertiserType
-            adOrderSponsorshipLevel
-            ageInDays
-            employer { id name shortName __typename }
-            employerNameFromSearch
-            goc gocConfidence gocId jobCountryId
-            jobLink jobResultTrackingKey jobTitleText
-            locationName locationType locId
-            payCurrency payPeriod
-            payPeriodAdjustedPay { p10 p50 p90 __typename }
-            rating salarySource savedJobId sponsored
-            __typename
-          }
-          job {
-            description importConfigId jobTitleId jobTitleText listingId
-            __typename
-          }
-          overview { shortName squareLogoUrl __typename }
-          __typename
-        }
+        ...JobView
         __typename
       }
       paginationCursors { cursor pageNumber __typename }

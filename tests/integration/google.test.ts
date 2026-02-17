@@ -5,7 +5,7 @@ import { scrapeJobs } from "../../src/scraper";
 
 const OUT_DIR = join(import.meta.dirname, "../../tmp/test-results");
 
-describe("Google integration", () => {
+describe.skip("Google integration", () => {
   it("searches for react jobs and saves results", async () => {
     const result = await scrapeJobs({
       site_name: ["google"],

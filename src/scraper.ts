@@ -50,9 +50,11 @@ function mapStrToSite(name: string): Site {
   const upper = name.toUpperCase();
   const site = (Site as any)[upper];
   if (site) return site;
-  // Try matching by value
+  const normalized = name.toLowerCase().replace(/[_\s-]/g, "");
+  // Try matching by value (exact, then normalized)
   for (const s of Object.values(Site)) {
     if (s === name.toLowerCase()) return s as Site;
+    if ((s as string).replace(/_/g, "") === normalized) return s as Site;
   }
   throw new Error(`Unknown site: ${name}`);
 }
