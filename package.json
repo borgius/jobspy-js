@@ -1,6 +1,6 @@
 {
   "name": "jobspy-js",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Job scraper for LinkedIn, Indeed, Glassdoor, Google, ZipRecruiter, Bayt, Naukri & BDJobs",
   "type": "module",
   "main": "./dist/index.js",
@@ -25,7 +25,8 @@
     "cli": "vite-node src/cli/index.ts",
     "mcp": "vite-node src/mcp/index.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "release": "npm version minor --no-git-tag-version && pnpm build && npm publish"
   },
   "keywords": [
     "jobs-scraper",
