@@ -41,6 +41,8 @@ npm install jobspy-js
 
 ## SDK Usage
 
+> **Full SDK reference:** See [SDK.md](https://github.com/borgius/jobspy-js/blob/master/SDK.md) for complete documentation — all parameters, types, enums, output fields, proxy configuration, country support, and advanced examples.
+
 ```ts
 import { scrapeJobs } from "jobspy-js";
 
