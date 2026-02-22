@@ -14,7 +14,11 @@ export default defineConfig({
         "cli/index": "src/cli/index.ts",
         "mcp/index": "src/mcp/index.ts",
       },
-      formats: ["es"],
+      formats: ["es", "cjs"],
+      fileName: (format, entryName) => {
+        const ext = format === "es" ? "js" : "cjs";
+        return `${entryName}.${ext}`;
+      },
     },
     rollupOptions: {
       external: (id) => !id.startsWith(".") && !id.startsWith("/"),
@@ -23,8 +27,6 @@ export default defineConfig({
           chunk.name === "cli/index" || chunk.name === "mcp/index"
             ? "#!/usr/bin/env node"
             : "",
-        entryFileNames: "[name].js",
-        chunkFileNames: "shared/[name]-[hash].js",
       },
     },
     outDir: "dist",
