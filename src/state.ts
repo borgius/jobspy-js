@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ScrapeJobsParams } from "./types";
+import type { FlatJobRecord } from "./scraper";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -92,4 +93,28 @@ export function mergeParams(
     }
   }
   return merged;
+}
+
+export function filterNewJobs(
+  jobs: FlatJobRecord[],
+  providerState: ProviderState,
+): FlatJobRecord[] {
+  const { lastSeenDate, seenUrls } = providerState;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - URL_WINDOW_DAYS);
+  const cutoffStr = cutoff.toISOString().split("T")[0];
+
+  const windowUrls = new Set(
+    seenUrls
+      .filter((s) => s.seenAt >= cutoffStr)
+      .map((s) => s.url),
+  );
+
+  return jobs.filter((job) => {
+    if (windowUrls.has(job.job_url)) return false;
+    if (job.date_posted && lastSeenDate) {
+      if (job.date_posted <= lastSeenDate) return false;
+    }
+    return true;
+  });
 }

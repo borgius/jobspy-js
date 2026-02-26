@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findStateFilePath, loadState, saveState, mergeParams } from "../../src/state";
+import { findStateFilePath, loadState, saveState, mergeParams, filterNewJobs } from "../../src/state";
 import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -106,5 +106,61 @@ describe("mergeParams", () => {
     expect(merged.is_remote).toBe(false);
     expect(merged.distance).toBe(0);
     expect(merged.offset).toBe(0);
+  });
+});
+
+function makeJob(overrides: Partial<{ job_url: string; date_posted: string }>): any {
+  return { job_url: "https://example.com/job/1", title: "Dev", site: "indeed", ...overrides };
+}
+
+function daysAgo(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().split("T")[0];
+}
+
+describe("filterNewJobs", () => {
+  it("keeps all jobs on first run (empty state)", () => {
+    const jobs = [
+      makeJob({ date_posted: daysAgo(1) }),
+      makeJob({ job_url: "https://example.com/job/2", date_posted: daysAgo(0) }),
+    ];
+    const result = filterNewJobs(jobs, { lastSeenDate: null, seenUrls: [] });
+    expect(result).toHaveLength(2);
+  });
+
+  it("filters jobs older than or equal to lastSeenDate", () => {
+    const jobs = [
+      makeJob({ date_posted: daysAgo(3), job_url: "https://example.com/old" }),
+      makeJob({ date_posted: daysAgo(0), job_url: "https://example.com/new" }),
+    ];
+    const state = { lastSeenDate: daysAgo(2), seenUrls: [] };
+    const result = filterNewJobs(jobs, state);
+    expect(result).toHaveLength(1);
+    expect(result[0].job_url).toBe("https://example.com/new");
+  });
+
+  it("filters jobs whose URL is in the rolling window even if date is newer", () => {
+    const url = "https://example.com/repost";
+    const jobs = [makeJob({ date_posted: daysAgo(0), job_url: url })];
+    const state = { lastSeenDate: daysAgo(5), seenUrls: [{ url, seenAt: daysAgo(1) }] };
+    expect(filterNewJobs(jobs, state)).toHaveLength(0);
+  });
+
+  it("does NOT filter URLs seen more than 7 days ago", () => {
+    const url = "https://example.com/old-post";
+    const jobs = [makeJob({ date_posted: daysAgo(0), job_url: url })];
+    const state = { lastSeenDate: null, seenUrls: [{ url, seenAt: daysAgo(8) }] };
+    expect(filterNewJobs(jobs, state)).toHaveLength(1);
+  });
+
+  it("falls back to URL check when date_posted is missing (Bayt-style)", () => {
+    const url = "https://bayt.com/job/99";
+    const jobs = [makeJob({ date_posted: undefined, job_url: url })];
+    const seen = { lastSeenDate: null, seenUrls: [{ url, seenAt: daysAgo(1) }] };
+    expect(filterNewJobs(jobs, seen)).toHaveLength(0);
+
+    const unseen = { lastSeenDate: null, seenUrls: [] };
+    expect(filterNewJobs(jobs, unseen)).toHaveLength(1);
   });
 });
