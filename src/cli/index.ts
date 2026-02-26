@@ -53,7 +53,27 @@ program
   .option("--enforce-annual-salary", "Convert all salaries to annual")
   .option("-v, --verbose <level>", "Verbosity (0=errors, 1=warnings, 2=all)", "0")
   .option("-o, --output <file>", "Output file path (JSON or CSV based on extension)")
+  .option("--profile <name>", "Named search profile — saves params and dedup state")
+  .option("--all", "Skip dedup for this run (still updates state)")
+  .option("--list-profiles", "List saved profiles and their last run time")
   .action(async (opts) => {
+    if (opts.listProfiles) {
+      const { findStateFilePath, loadState } = await import("../state");
+      const stateFilePath = findStateFilePath();
+      const state = loadState(stateFilePath);
+      const profiles = Object.entries(state.profiles);
+      if (profiles.length === 0) {
+        console.log("No saved profiles. Run with --profile <name> to create one.");
+      } else {
+        console.log(`Profiles in ${stateFilePath}:`);
+        for (const [name, p] of profiles) {
+          const last = p.lastRunAt ? new Date(p.lastRunAt).toLocaleString() : "never";
+          const sites = (p.params.site_name as string[] | undefined)?.join(", ") ?? "all";
+          console.log(`  ${name.padEnd(20)} last run: ${last}  sites: ${sites}  term: ${p.params.search_term ?? ""}`);
+        }
+      }
+      return;
+    }
     try {
       const result = await scrapeJobs({
         site_name: opts.site,
@@ -74,9 +94,14 @@ program
         hours_old: opts.hoursOld ? parseInt(opts.hoursOld) : undefined,
         enforce_annual_salary: opts.enforceAnnualSalary ?? false,
         verbose: parseInt(opts.verbose),
+        profile: opts.profile,
+        skipDedup: opts.all ?? false,
       });
 
       console.log(`Found ${result.jobs.length} jobs`);
+      if (result.profile) {
+        console.log(`  (${result.totalScraped} scraped, ${result.newCount} new since last run — state: ${result.profile.stateFile})`);
+      }
 
       if (opts.output) {
         const outPath = opts.output as string;
