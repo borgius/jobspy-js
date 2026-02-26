@@ -118,3 +118,30 @@ export function filterNewJobs(
     return true;
   });
 }
+
+export function updateProviderState(
+  state: ProviderState,
+  newJobs: FlatJobRecord[],
+): ProviderState {
+  const today = new Date().toISOString().split("T")[0];
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - URL_WINDOW_DAYS);
+  const cutoffStr = cutoff.toISOString().split("T")[0];
+
+  let newLastSeenDate = state.lastSeenDate;
+  for (const job of newJobs) {
+    if (job.date_posted) {
+      if (!newLastSeenDate || job.date_posted > newLastSeenDate) {
+        newLastSeenDate = job.date_posted;
+      }
+    }
+  }
+
+  const pruned = state.seenUrls.filter((s) => s.seenAt >= cutoffStr);
+  const added = newJobs.map((job) => ({ url: job.job_url, seenAt: today }));
+
+  return {
+    lastSeenDate: newLastSeenDate,
+    seenUrls: [...pruned, ...added],
+  };
+}

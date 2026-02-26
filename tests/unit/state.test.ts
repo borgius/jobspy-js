@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findStateFilePath, loadState, saveState, mergeParams, filterNewJobs } from "../../src/state";
+import { findStateFilePath, loadState, saveState, mergeParams, filterNewJobs, updateProviderState } from "../../src/state";
 import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -176,5 +176,39 @@ describe("filterNewJobs", () => {
     const jobs = [makeJob({ date_posted: daysAgo(0), job_url: url })];
     const state = { lastSeenDate: null, seenUrls: [{ url, seenAt: daysAgo(7) }] };
     expect(filterNewJobs(jobs, state)).toHaveLength(0);
+  });
+});
+
+describe("updateProviderState", () => {
+  const today = new Date().toISOString().split("T")[0];
+
+  it("sets lastSeenDate to max date_posted of new jobs", () => {
+    const jobs = [
+      makeJob({ date_posted: daysAgo(2), job_url: "https://a.com/1" }),
+      makeJob({ date_posted: daysAgo(0), job_url: "https://a.com/2" }),
+    ];
+    const result = updateProviderState({ lastSeenDate: null, seenUrls: [] }, jobs);
+    expect(result.lastSeenDate).toBe(today);
+  });
+
+  it("does not downgrade lastSeenDate if new jobs are older", () => {
+    const prev = daysAgo(0);
+    const jobs = [makeJob({ date_posted: daysAgo(3), job_url: "https://a.com/3" })];
+    const result = updateProviderState({ lastSeenDate: prev, seenUrls: [] }, jobs);
+    expect(result.lastSeenDate).toBe(prev);
+  });
+
+  it("adds new job URLs to seenUrls with today's date", () => {
+    const jobs = [makeJob({ job_url: "https://new.com/job" })];
+    const result = updateProviderState({ lastSeenDate: null, seenUrls: [] }, jobs);
+    expect(result.seenUrls).toContainEqual({ url: "https://new.com/job", seenAt: today });
+  });
+
+  it("prunes seenUrls entries older than 7 days", () => {
+    const old = { url: "https://old.com/job", seenAt: daysAgo(8) };
+    const recent = { url: "https://recent.com/job", seenAt: daysAgo(3) };
+    const result = updateProviderState({ lastSeenDate: null, seenUrls: [old, recent] }, []);
+    expect(result.seenUrls.find((s) => s.url === old.url)).toBeUndefined();
+    expect(result.seenUrls.find((s) => s.url === recent.url)).toBeDefined();
   });
 });
