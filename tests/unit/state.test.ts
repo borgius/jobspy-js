@@ -211,4 +211,15 @@ describe("updateProviderState", () => {
     expect(result.seenUrls.find((s) => s.url === old.url)).toBeUndefined();
     expect(result.seenUrls.find((s) => s.url === recent.url)).toBeDefined();
   });
+
+  it("does not duplicate URLs when a job_url already exists in seenUrls", () => {
+    const url = "https://existing.com/job";
+    const existingEntry = { url, seenAt: daysAgo(2) };
+    const jobs = [makeJob({ job_url: url })];
+    const result = updateProviderState({ lastSeenDate: null, seenUrls: [existingEntry] }, jobs);
+    const occurrences = result.seenUrls.filter((s) => s.url === url);
+    expect(occurrences).toHaveLength(1);
+    // seenAt should be refreshed to today
+    expect(occurrences[0].seenAt).toBe(new Date().toISOString().split("T")[0]);
+  });
 });

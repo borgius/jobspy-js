@@ -128,6 +128,8 @@ export function updateProviderState(
   cutoff.setDate(cutoff.getDate() - URL_WINDOW_DAYS);
   const cutoffStr = cutoff.toISOString().split("T")[0];
 
+  // lastSeenDate intentionally stays null for providers that never set date_posted (e.g. Bayt).
+  // In that case, filterNewJobs relies solely on the URL rolling window.
   let newLastSeenDate = state.lastSeenDate;
   for (const job of newJobs) {
     if (job.date_posted) {
@@ -137,11 +139,15 @@ export function updateProviderState(
     }
   }
 
+  // Prune old entries from existing state, then append new entries.
+  // Refresh seenAt for any URL that reappears in newJobs (sliding window).
   const pruned = state.seenUrls.filter((s) => s.seenAt >= cutoffStr);
+  const newUrls = new Set(newJobs.map((job) => job.job_url));
+  const deduped = pruned.filter((s) => !newUrls.has(s.url));
   const added = newJobs.map((job) => ({ url: job.job_url, seenAt: today }));
 
   return {
     lastSeenDate: newLastSeenDate,
-    seenUrls: [...pruned, ...added],
+    seenUrls: [...deduped, ...added],
   };
 }
