@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, renameSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import type { ScrapeJobsParams } from "./types";
 import type { FlatJobRecord } from "./scraper";
@@ -12,13 +12,18 @@ export interface SeenUrl {
 
 export interface ProviderState {
   lastSeenDate: string | null; // ISO date YYYY-MM-DD; null for providers that never set date_posted
+  /**
+   * URLs seen within the last URL_WINDOW_DAYS days.
+   * Entries older than this window must be evicted on every state save.
+   * Always write seenAt using new Date().toISOString().slice(0, 10).
+   */
   seenUrls: SeenUrl[];
 }
 
 export interface ProfileState {
   params: ScrapeJobsParams;
   lastRunAt: string | null; // ISO timestamp
-  state: Record<string, ProviderState>; // keyed by site name
+  providers: Record<string, ProviderState>; // keyed by site name
 }
 
 export interface JobspyState {
@@ -26,7 +31,9 @@ export interface JobspyState {
   profiles: Record<string, ProfileState>;
 }
 
-export const EMPTY_STATE: JobspyState = { version: 1, profiles: {} };
+export function emptyState(): JobspyState {
+  return { version: 1, profiles: {} };
+}
 
 const STATE_FILENAME = ".jobspy-state.json";
 export const URL_WINDOW_DAYS = 7;
@@ -35,7 +42,8 @@ export const URL_WINDOW_DAYS = 7;
 
 export function findStateFilePath(override?: string): string {
   if (override) return override;
-  let dir = process.cwd();
+  const cwd = process.cwd();
+  let dir = cwd;
   while (true) {
     if (existsSync(join(dir, ".git"))) {
       return join(dir, STATE_FILENAME);
@@ -44,5 +52,5 @@ export function findStateFilePath(override?: string): string {
     if (parent === dir) break; // reached filesystem root
     dir = parent;
   }
-  return join(process.cwd(), STATE_FILENAME);
+  return join(cwd, STATE_FILENAME);
 }
