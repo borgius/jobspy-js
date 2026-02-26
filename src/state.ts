@@ -76,6 +76,11 @@ export function saveState(filePath: string, state: JobspyState): void {
   }
 }
 
+/**
+ * Merge saved profile params with runtime-supplied params.
+ * Runtime values override saved values for every key that is not undefined.
+ * Falsy values (false, 0, "") are treated as intentional overrides.
+ */
 export function mergeParams(
   saved: ScrapeJobsParams,
   runtime: ScrapeJobsParams,

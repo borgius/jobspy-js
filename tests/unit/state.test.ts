@@ -98,4 +98,13 @@ describe("mergeParams", () => {
   it("works with empty saved params", () => {
     expect(mergeParams({}, { search_term: "test" })).toEqual({ search_term: "test" });
   });
+
+  it("falsy runtime values (false, 0) overwrite saved values", () => {
+    const saved = { is_remote: true, distance: 50, offset: 5 };
+    const runtime = { is_remote: false, distance: 0, offset: 0 };
+    const merged = mergeParams(saved, runtime);
+    expect(merged.is_remote).toBe(false);
+    expect(merged.distance).toBe(0);
+    expect(merged.offset).toBe(0);
+  });
 });
