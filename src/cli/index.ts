@@ -61,9 +61,9 @@ program
       const { findStateFilePath, loadState } = await import("../state");
       const stateFilePath = findStateFilePath();
       const state = loadState(stateFilePath);
-      const profiles = Object.entries(state.profiles);
+      const profiles = Object.entries(state.profiles ?? {});
       if (profiles.length === 0) {
-        console.log("No saved profiles. Run with --profile <name> to create one.");
+        console.log(`No saved profiles in ${stateFilePath}. Run with --profile <name> to create one.`);
       } else {
         console.log(`Profiles in ${stateFilePath}:`);
         for (const [name, p] of profiles) {
@@ -100,7 +100,8 @@ program
 
       console.log(`Found ${result.jobs.length} jobs`);
       if (result.profile) {
-        console.log(`  (${result.totalScraped} scraped, ${result.newCount} new since last run — state: ${result.profile.stateFile})`);
+        const runLabel = result.profile.lastRunAt ? "new since last run" : "first run";
+        console.log(`  (${result.totalScraped} scraped, ${result.newCount} ${runLabel} — state: ${result.profile.stateFile})`);
       }
 
       if (opts.output) {
@@ -125,8 +126,8 @@ program
           console.log(line);
         }
       }
-    } catch (e: any) {
-      console.error(`Error: ${e.message}`);
+    } catch (e: unknown) {
+      console.error(`Error: ${e instanceof Error ? e.message : String(e)}`);
       process.exit(1);
     }
   });
