@@ -71,6 +71,13 @@ function resolveJobType(jt?: string): JobType | undefined {
 
 export interface ScrapeJobsResult {
   jobs: FlatJobRecord[];
+  totalScraped: number;
+  newCount: number;
+  profile?: {
+    name: string;
+    lastRunAt: string | null;
+    stateFile: string;
+  };
 }
 
 export interface FlatJobRecord {

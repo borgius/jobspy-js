@@ -207,6 +207,11 @@ export interface ScrapeJobsParams {
   hours_old?: number;
   enforce_annual_salary?: boolean;
   verbose?: number;
+
+  // Profile / state
+  profile?: string;
+  stateFile?: string;
+  skipDedup?: boolean;
 }
 
 export interface Country {
