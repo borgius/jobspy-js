@@ -218,7 +218,8 @@ export async function scrapeJobs(
   const totalScraped = flatJobs.length;
 
   // ── Profile / dedup ────────────────────────────────────────────────────────
-  if (!params.profile) {
+  // Note: not safe for concurrent processes sharing the same profile and state file.
+  if (!params.profile?.trim()) {
     return { jobs: flatJobs, totalScraped, newCount: totalScraped };
   }
 
