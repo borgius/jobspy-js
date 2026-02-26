@@ -1,7 +1,6 @@
-import { existsSync, readFileSync, writeFileSync, renameSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { ScrapeJobsParams } from "./types";
-import type { FlatJobRecord } from "./scraper";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -59,13 +58,20 @@ export function loadState(filePath: string): JobspyState {
   try {
     const raw = readFileSync(filePath, "utf-8");
     return JSON.parse(raw) as JobspyState;
-  } catch {
-    return emptyState();
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || e instanceof SyntaxError) return emptyState();
+    throw e;
   }
 }
 
 export function saveState(filePath: string, state: JobspyState): void {
-  const tmp = filePath + ".tmp";
-  writeFileSync(tmp, JSON.stringify(state, null, 2));
-  renameSync(tmp, filePath);
+  const tmp = `${filePath}.tmp`;
+  try {
+    writeFileSync(tmp, JSON.stringify(state, null, 2));
+    renameSync(tmp, filePath);
+  } catch (e) {
+    try { unlinkSync(tmp); } catch { /* best-effort cleanup */ }
+    throw e;
+  }
 }
