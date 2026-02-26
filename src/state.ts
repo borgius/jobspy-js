@@ -75,3 +75,16 @@ export function saveState(filePath: string, state: JobspyState): void {
     throw e;
   }
 }
+
+export function mergeParams(
+  saved: ScrapeJobsParams,
+  runtime: ScrapeJobsParams,
+): ScrapeJobsParams {
+  const merged: ScrapeJobsParams = { ...saved };
+  for (const [key, val] of Object.entries(runtime)) {
+    if (val !== undefined) {
+      (merged as Record<string, unknown>)[key] = val;
+    }
+  }
+  return merged;
+}

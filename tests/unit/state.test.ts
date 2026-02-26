@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findStateFilePath, loadState, saveState } from "../../src/state";
+import { findStateFilePath, loadState, saveState, mergeParams } from "../../src/state";
 import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -77,5 +77,25 @@ describe("saveState", () => {
     saveState(tmp, { version: 1, profiles: {} });
     expect(existsSync(tmp + ".tmp")).toBe(false);
     rmSync(tmp, { force: true });
+  });
+});
+
+describe("mergeParams", () => {
+  it("runtime params override saved params", () => {
+    const saved = { search_term: "old", location: "NYC", results_wanted: 10 };
+    const runtime = { search_term: "new" };
+    expect(mergeParams(saved, runtime)).toMatchObject({ search_term: "new", location: "NYC", results_wanted: 10 });
+  });
+
+  it("undefined runtime values do not overwrite saved values", () => {
+    const saved = { search_term: "saved", results_wanted: 20 };
+    const runtime = { search_term: undefined, location: "SF" };
+    const merged = mergeParams(saved, runtime);
+    expect(merged.search_term).toBe("saved");
+    expect(merged.location).toBe("SF");
+  });
+
+  it("works with empty saved params", () => {
+    expect(mergeParams({}, { search_term: "test" })).toEqual({ search_term: "test" });
   });
 });
