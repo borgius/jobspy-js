@@ -22,6 +22,15 @@ import { Bayt } from "./scrapers/bayt";
 import { Naukri } from "./scrapers/naukri";
 import { BDJobs } from "./scrapers/bdjobs";
 import type { Scraper } from "./scrapers/base";
+import {
+  findStateFilePath,
+  loadState,
+  saveState,
+  mergeParams,
+  filterNewJobs,
+  updateProviderState,
+  type ProfileState,
+} from "./state";
 
 const SCRAPER_MAP: Record<Site, new (opts: { proxies?: string | string[] | null }) => Scraper> = {
   [Site.INDEED]: Indeed,
@@ -206,7 +215,58 @@ export async function scrapeJobs(
     return bDate.localeCompare(aDate);
   });
 
-  return { jobs: flatJobs };
+  const totalScraped = flatJobs.length;
+
+  // ── Profile / dedup ────────────────────────────────────────────────────────
+  if (!params.profile) {
+    return { jobs: flatJobs, totalScraped, newCount: totalScraped };
+  }
+
+  const stateFilePath = findStateFilePath(params.stateFile);
+  const stateData = loadState(stateFilePath);
+
+  const profileName = params.profile;
+  const existing: ProfileState = stateData.profiles[profileName] ?? {
+    params: {},
+    lastRunAt: null,
+    providers: {},
+  };
+
+  // Filter per site unless skipDedup
+  let filteredJobs = flatJobs;
+  if (!params.skipDedup) {
+    filteredJobs = [];
+    for (const site of sites) {
+      const siteJobs = flatJobs.filter((j) => j.site === (site as string));
+      const provState = existing.providers[site] ?? { lastSeenDate: null, seenUrls: [] };
+      filteredJobs.push(...filterNewJobs(siteJobs, provState));
+    }
+  }
+
+  // Update state for each site with ALL scraped jobs (not just filtered)
+  for (const site of sites) {
+    const siteJobs = flatJobs.filter((j) => j.site === (site as string));
+    const provState = existing.providers[site] ?? { lastSeenDate: null, seenUrls: [] };
+    existing.providers[site] = updateProviderState(provState, siteJobs);
+  }
+
+  // Persist profile — strip profile/stateFile/skipDedup from saved params
+  const { profile: _p, stateFile: _sf, skipDedup: _sd, ...paramsToSave } = params;
+  existing.params = mergeParams(existing.params, paramsToSave);
+  existing.lastRunAt = new Date().toISOString();
+  stateData.profiles[profileName] = existing;
+  saveState(stateFilePath, stateData);
+
+  return {
+    jobs: filteredJobs,
+    totalScraped,
+    newCount: filteredJobs.length,
+    profile: {
+      name: profileName,
+      lastRunAt: existing.lastRunAt,
+      stateFile: stateFilePath,
+    },
+  };
 }
 
 function flattenJob(
