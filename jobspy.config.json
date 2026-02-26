@@ -1,0 +1,31 @@
+{
+  "site": [
+    "linkedin",
+    "indeed",
+    "zip_recruiter",
+    "glassdoor",
+    "google",
+    "bayt",
+    "naukri",
+    "bdjobs"
+  ],
+  "search_term": "react developer",
+  "google_search_term": "react developer jobs near New York NY",
+  "location": "New York, NY",
+  "distance": 25,
+  "remote": false,
+  "job_type": "fulltime",
+  "easy_apply": false,
+  "results": 50,
+  "country": "usa",
+  "proxies": [],
+  "format": "markdown",
+  "linkedin_fetch_description": true,
+  "linkedin_company_ids": [],
+  "offset": 0,
+  "hours_old": 72,
+  "enforce_annual_salary": true,
+  "verbose": 1,
+  "output": "jobs.csv",
+  "profile": "react-ny"
+}
