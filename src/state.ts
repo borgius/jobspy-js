@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join, dirname } from "node:path";
 import type { ScrapeJobsParams } from "./types";
 import type { FlatJobRecord } from "./scraper";
@@ -53,4 +53,19 @@ export function findStateFilePath(override?: string): string {
     dir = parent;
   }
   return join(cwd, STATE_FILENAME);
+}
+
+export function loadState(filePath: string): JobspyState {
+  try {
+    const raw = readFileSync(filePath, "utf-8");
+    return JSON.parse(raw) as JobspyState;
+  } catch {
+    return emptyState();
+  }
+}
+
+export function saveState(filePath: string, state: JobspyState): void {
+  const tmp = filePath + ".tmp";
+  writeFileSync(tmp, JSON.stringify(state, null, 2));
+  renameSync(tmp, filePath);
 }

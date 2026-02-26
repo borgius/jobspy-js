@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { findStateFilePath } from "../../src/state";
-import { mkdirSync, rmSync, existsSync } from "node:fs";
+import { findStateFilePath, loadState, saveState } from "../../src/state";
+import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -37,5 +37,45 @@ describe("findStateFilePath", () => {
       process.cwd = original;
       rmSync(tmpRoot, { recursive: true, force: true });
     }
+  });
+});
+
+describe("loadState", () => {
+  it("returns empty state when file does not exist", () => {
+    const result = loadState("/tmp/does-not-exist-ever.json");
+    expect(result).toEqual({ version: 1, profiles: {} });
+  });
+
+  it("parses a valid state file", () => {
+    const tmp = join(tmpdir(), `jobspy-load-${Date.now()}.json`);
+    const data = { version: 1, profiles: { test: { params: {}, lastRunAt: null, providers: {} } } };
+    writeFileSync(tmp, JSON.stringify(data));
+    expect(loadState(tmp)).toEqual(data);
+    rmSync(tmp, { force: true });
+  });
+
+  it("returns empty state for malformed JSON", () => {
+    const tmp = join(tmpdir(), `jobspy-bad-${Date.now()}.json`);
+    writeFileSync(tmp, "not json {{{{");
+    expect(loadState(tmp)).toEqual({ version: 1, profiles: {} });
+    rmSync(tmp, { force: true });
+  });
+});
+
+describe("saveState", () => {
+  it("writes state to file and reads it back", () => {
+    const tmp = join(tmpdir(), `jobspy-save-${Date.now()}.json`);
+    const state = { version: 1, profiles: { myprofile: { params: { search_term: "engineer" }, lastRunAt: null, providers: {} } } };
+    saveState(tmp, state);
+    const back = JSON.parse(readFileSync(tmp, "utf-8"));
+    expect(back).toEqual(state);
+    rmSync(tmp, { force: true });
+  });
+
+  it("does not leave a .tmp file behind", () => {
+    const tmp = join(tmpdir(), `jobspy-atomic-${Date.now()}.json`);
+    saveState(tmp, { version: 1, profiles: {} });
+    expect(existsSync(tmp + ".tmp")).toBe(false);
+    rmSync(tmp, { force: true });
   });
 });
