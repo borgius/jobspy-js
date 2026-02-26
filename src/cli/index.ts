@@ -74,6 +74,9 @@ program
       }
       return;
     }
+    if (opts.all && !opts.profile) {
+      console.warn("Warning: --all has no effect without --profile");
+    }
     try {
       const result = await scrapeJobs({
         site_name: opts.site,
@@ -95,7 +98,7 @@ program
         enforce_annual_salary: opts.enforceAnnualSalary ?? false,
         verbose: parseInt(opts.verbose),
         profile: opts.profile,
-        skipDedup: opts.all ?? false,
+        skip_dedup: opts.all ?? false,
       });
 
       console.log(`Found ${result.jobs.length} jobs`);

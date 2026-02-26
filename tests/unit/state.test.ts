@@ -171,7 +171,7 @@ describe("filterNewJobs", () => {
     expect(filterNewJobs(jobs, state)).toHaveLength(0);
   });
 
-  it("keeps URL seen exactly 7 days ago (inclusive boundary — still in window)", () => {
+  it("blocks URL seen exactly 7 days ago (inclusive boundary — still in window)", () => {
     const url = "https://example.com/boundary";
     const jobs = [makeJob({ date_posted: daysAgo(0), job_url: url })];
     const state = { lastSeenDate: null, seenUrls: [{ url, seenAt: daysAgo(7) }] };

@@ -223,7 +223,7 @@ export async function scrapeJobs(
     return { jobs: flatJobs, totalScraped, newCount: totalScraped };
   }
 
-  const stateFilePath = findStateFilePath(params.stateFile);
+  const stateFilePath = findStateFilePath(params.state_file);
   const stateData = loadState(stateFilePath);
 
   const profileName = params.profile;
@@ -235,7 +235,7 @@ export async function scrapeJobs(
 
   // Filter per site unless skipDedup
   let filteredJobs = flatJobs;
-  if (!params.skipDedup) {
+  if (!params.skip_dedup) {
     filteredJobs = [];
     for (const site of sites) {
       const siteJobs = flatJobs.filter((j) => j.site === (site as string));
@@ -252,7 +252,7 @@ export async function scrapeJobs(
   }
 
   // Persist profile — strip profile/stateFile/skipDedup from saved params
-  const { profile: _p, stateFile: _sf, skipDedup: _sd, ...paramsToSave } = params;
+  const { profile: _p, state_file: _sf, skip_dedup: _sd, ...paramsToSave } = params;
   existing.params = mergeParams(existing.params, paramsToSave);
   existing.lastRunAt = new Date().toISOString();
   stateData.profiles[profileName] = existing;

@@ -210,8 +210,8 @@ export interface ScrapeJobsParams {
 
   // Profile / state
   profile?: string;
-  stateFile?: string;
-  skipDedup?: boolean;
+  state_file?: string;
+  skip_dedup?: boolean;
 }
 
 export interface Country {
