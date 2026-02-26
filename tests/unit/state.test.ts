@@ -163,4 +163,18 @@ describe("filterNewJobs", () => {
     const unseen = { lastSeenDate: null, seenUrls: [] };
     expect(filterNewJobs(jobs, unseen)).toHaveLength(1);
   });
+
+  it("filters job posted on exactly lastSeenDate (equal is excluded)", () => {
+    const date = daysAgo(2);
+    const jobs = [makeJob({ date_posted: date, job_url: "https://example.com/exact" })];
+    const state = { lastSeenDate: date, seenUrls: [] };
+    expect(filterNewJobs(jobs, state)).toHaveLength(0);
+  });
+
+  it("keeps URL seen exactly 7 days ago (inclusive boundary — still in window)", () => {
+    const url = "https://example.com/boundary";
+    const jobs = [makeJob({ date_posted: daysAgo(0), job_url: url })];
+    const state = { lastSeenDate: null, seenUrls: [{ url, seenAt: daysAgo(7) }] };
+    expect(filterNewJobs(jobs, state)).toHaveLength(0);
+  });
 });
