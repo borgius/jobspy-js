@@ -23,10 +23,9 @@ import { Naukri } from "./scrapers/naukri";
 import { BDJobs } from "./scrapers/bdjobs";
 import type { Scraper } from "./scrapers/base";
 import {
-  findStateFilePath,
-  loadState,
-  saveState,
-  mergeParams,
+  findJobspyPath,
+  loadFile,
+  saveFile,
   filterNewJobs,
   updateProviderState,
   type ProfileState,
@@ -223,12 +222,11 @@ export async function scrapeJobs(
     return { jobs: flatJobs, totalScraped, newCount: totalScraped };
   }
 
-  const stateFilePath = findStateFilePath(params.state_file);
-  const stateData = loadState(stateFilePath);
+  const filePath = findJobspyPath(params.state_file);
+  const file = loadFile(filePath);
 
   const profileName = params.profile;
-  const existing: ProfileState = stateData.profiles[profileName] ?? {
-    params: {},
+  const existing: ProfileState = file.state.profiles[profileName] ?? {
     lastRunAt: null,
     providers: {},
   };
@@ -251,12 +249,9 @@ export async function scrapeJobs(
     existing.providers[site] = updateProviderState(provState, siteJobs);
   }
 
-  // Persist profile — strip profile/stateFile/skipDedup from saved params
-  const { profile: _p, state_file: _sf, skip_dedup: _sd, ...paramsToSave } = params;
-  existing.params = mergeParams(existing.params, paramsToSave);
   existing.lastRunAt = new Date().toISOString();
-  stateData.profiles[profileName] = existing;
-  saveState(stateFilePath, stateData);
+  file.state.profiles[profileName] = existing;
+  saveFile(filePath, file);
 
   return {
     jobs: filteredJobs,
@@ -265,7 +260,7 @@ export async function scrapeJobs(
     profile: {
       name: profileName,
       lastRunAt: existing.lastRunAt,
-      stateFile: stateFilePath,
+      stateFile: filePath,
     },
   };
 }

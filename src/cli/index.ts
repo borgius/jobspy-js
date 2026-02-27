@@ -1,18 +1,7 @@
 import { Command } from "commander";
 import { scrapeJobs } from "../scraper";
-import { Site } from "../types";
-import { writeFileSync, existsSync, readFileSync } from "node:fs";
+import { writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-
-function loadConfigFile(): Record<string, any> {
-  const configPath = resolve(process.cwd(), "jobspy.config.json");
-  if (!existsSync(configPath)) return {};
-  try {
-    return JSON.parse(readFileSync(configPath, "utf-8"));
-  } catch {
-    return {};
-  }
-}
 
 const program = new Command();
 
@@ -65,63 +54,113 @@ program
   .option("--enforce-annual-salary", "Convert all salaries to annual")
   .option("-v, --verbose <level>", "Verbosity (0=errors, 1=warnings, 2=all)", "0")
   .option("-o, --output <file>", "Output file path (JSON or CSV based on extension)")
-  .option("--profile <name>", "Named search profile — saves params and dedup state")
+  .option("--profile <name>", "Named search profile from jobspy.json")
   .option("--all", "Skip dedup for this run (still updates state)")
   .option("--list-profiles", "List saved profiles and their last run time")
-  .option("--init", "Generate a jobspy.config.json in the current directory with defaults")
+  .option("--init", "Generate a jobspy.json with sample profiles")
   .action(async (opts) => {
     if (opts.init) {
-      const configPath = resolve(process.cwd(), "jobspy.config.json");
-      if (existsSync(configPath)) {
-        console.error(`Config file already exists: ${configPath}`);
+      const filePath = resolve(process.cwd(), "jobspy.json");
+      if (existsSync(filePath)) {
+        console.error(`File already exists: ${filePath}`);
         process.exit(1);
       }
-      const defaultConfig = {
-        site: ["linkedin", "indeed", "zip_recruiter", "glassdoor", "google", "bayt", "naukri", "bdjobs"],
-        search_term: "react developer",
-        google_search_term: "react developer jobs near New York NY",
-        location: "New York, NY",
-        distance: 25,
-        remote: false,
-        job_type: "fulltime",
-        easy_apply: false,
-        results: 50,
-        country: "usa",
-        proxies: [],
-        format: "markdown",
-        linkedin_fetch_description: true,
-        linkedin_company_ids: [],
-        offset: 0,
-        hours_old: 72,
-        enforce_annual_salary: true,
-        verbose: 1,
-        output: "jobs.csv",
-        profile: "react-ny",
+      const defaultFile = {
+        config: {
+          profiles: {
+            frontend: {
+              site: ["linkedin", "indeed", "zip_recruiter", "glassdoor", "google", "bayt", "naukri", "bdjobs"],
+              search_term: "react frontend developer",
+              google_search_term: "react frontend developer jobs near New York NY",
+              location: "New York, NY",
+              distance: 25,
+              remote: false,
+              job_type: "fulltime",
+              easy_apply: false,
+              results: 50,
+              country: "usa",
+              proxies: [],
+              format: "markdown",
+              linkedin_fetch_description: true,
+              linkedin_company_ids: [],
+              offset: 0,
+              hours_old: 72,
+              enforce_annual_salary: true,
+              verbose: 1,
+              output: "frontend-jobs.csv",
+            },
+            backend: {
+              site: ["linkedin", "indeed", "zip_recruiter", "glassdoor", "google", "bayt", "naukri", "bdjobs"],
+              search_term: "node.js backend engineer",
+              google_search_term: "node.js backend engineer jobs near New York NY",
+              location: "New York, NY",
+              distance: 25,
+              remote: true,
+              job_type: "fulltime",
+              easy_apply: false,
+              results: 50,
+              country: "usa",
+              proxies: [],
+              format: "markdown",
+              linkedin_fetch_description: true,
+              linkedin_company_ids: [],
+              offset: 0,
+              hours_old: 48,
+              enforce_annual_salary: true,
+              verbose: 1,
+              output: "backend-jobs.json",
+            },
+          },
+        },
+        state: {
+          version: 1,
+          profiles: {},
+        },
       };
-      writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2) + "\n");
-      console.log(`Created ${configPath}`);
+      writeFileSync(filePath, JSON.stringify(defaultFile, null, 2) + "\n");
+      console.log(`Created ${filePath}`);
       return;
     }
+
     if (opts.listProfiles) {
-      const { findStateFilePath, loadState } = await import("../state");
-      const stateFilePath = findStateFilePath();
-      const state = loadState(stateFilePath);
-      const profiles = Object.entries(state.profiles ?? {});
-      if (profiles.length === 0) {
-        console.log(`No saved profiles in ${stateFilePath}. Run with --profile <name> to create one.`);
+      const { findJobspyPath, loadFile } = await import("../state");
+      const filePath = findJobspyPath();
+      const file = loadFile(filePath);
+      const configNames = Object.keys(file.config.profiles);
+      const stateNames = Object.keys(file.state.profiles ?? {});
+      const allNames = [...new Set([...configNames, ...stateNames])].sort();
+      if (allNames.length === 0) {
+        console.log(`No profiles in ${filePath}. Run --init to create one.`);
       } else {
-        console.log(`Profiles in ${stateFilePath}:`);
-        for (const [name, p] of profiles) {
-          const last = p.lastRunAt ? new Date(p.lastRunAt).toLocaleString() : "never";
-          const sites = (p.params.site_name as string[] | undefined)?.join(", ") ?? "all";
-          console.log(`  ${name.padEnd(20)} last run: ${last}  sites: ${sites}  term: ${p.params.search_term ?? ""}`);
+        console.log(`Profiles in ${filePath}:`);
+        for (const name of allNames) {
+          const cfg = file.config.profiles[name];
+          const st = file.state.profiles?.[name];
+          const last = st?.lastRunAt ? new Date(st.lastRunAt).toLocaleString() : "never";
+          const sites = cfg?.site
+            ? (Array.isArray(cfg.site) ? cfg.site.join(", ") : cfg.site)
+            : "all";
+          const term = cfg?.search_term ?? "";
+          console.log(`  ${name.padEnd(20)} last run: ${last}  sites: ${sites}  term: ${term}`);
         }
       }
       return;
     }
-    // Merge config file defaults — CLI flags take priority
-    const cfg = loadConfigFile();
-    const cliSet = program.opts(); // only flags explicitly passed
+
+    // Load config profile defaults from jobspy.json (if profile specified)
+    let cfg: Record<string, any> = {};
+    if (opts.profile) {
+      const { findJobspyPath, loadFile } = await import("../state");
+      const filePath = findJobspyPath();
+      const file = loadFile(filePath);
+      const profileConfig = file.config.profiles[opts.profile];
+      if (profileConfig) {
+        cfg = profileConfig;
+      }
+    }
+
+    // Merge: CLI flags override config profile defaults
+    const cliSet = program.opts();
     const o = {
       site: opts.site ?? cfg.site,
       searchTerm: opts.searchTerm ?? cfg.search_term ?? undefined,
@@ -143,7 +182,7 @@ program
       enforceAnnualSalary: opts.enforceAnnualSalary ?? cfg.enforce_annual_salary ?? false,
       verbose: cliSet.verbose !== undefined ? opts.verbose : String(cfg.verbose ?? 0),
       output: opts.output ?? cfg.output ?? undefined,
-      profile: opts.profile ?? cfg.profile ?? undefined,
+      profile: opts.profile,
       all: opts.all ?? false,
     };
 

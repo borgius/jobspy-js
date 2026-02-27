@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { ScrapeJobsParams } from "./types";
 import type { FlatJobRecord } from "./scraper";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -21,7 +20,6 @@ export interface ProviderState {
 }
 
 export interface ProfileState {
-  params: ScrapeJobsParams;
   lastRunAt: string | null; // ISO timestamp
   providers: Record<string, ProviderState>; // keyed by site name
 }
@@ -31,68 +29,62 @@ export interface JobspyState {
   profiles: Record<string, ProfileState>;
 }
 
-export function emptyState(): JobspyState {
-  return { version: 1, profiles: {} };
+export interface JobspyFile {
+  config: {
+    profiles: Record<string, Record<string, any>>;
+  };
+  state: JobspyState;
 }
 
-const STATE_FILENAME = ".jobspy-state.json";
+export function emptyFile(): JobspyFile {
+  return {
+    config: { profiles: {} },
+    state: { version: 1, profiles: {} },
+  };
+}
+
+const JOBSPY_FILENAME = "jobspy.json";
 export const URL_WINDOW_DAYS = 7;
 
-// ─── findStateFilePath ────────────────────────────────────────────────────────
+// ─── findJobspyPath ──────────────────────────────────────────────────────────
 
-export function findStateFilePath(override?: string): string {
+export function findJobspyPath(override?: string): string {
   if (override) return override;
   const cwd = process.cwd();
   let dir = cwd;
   while (true) {
     if (existsSync(join(dir, ".git"))) {
-      return join(dir, STATE_FILENAME);
+      return join(dir, JOBSPY_FILENAME);
     }
     const parent = dirname(dir);
     if (parent === dir) break; // reached filesystem root
     dir = parent;
   }
-  return join(cwd, STATE_FILENAME);
+  return join(cwd, JOBSPY_FILENAME);
 }
 
-export function loadState(filePath: string): JobspyState {
+export function loadFile(filePath: string): JobspyFile {
   try {
     const raw = readFileSync(filePath, "utf-8");
-    return JSON.parse(raw) as JobspyState;
+    const parsed = JSON.parse(raw);
+    if (parsed.config && parsed.state) return parsed as JobspyFile;
+    return emptyFile();
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || e instanceof SyntaxError) return emptyState();
+    if (code === "ENOENT" || e instanceof SyntaxError) return emptyFile();
     throw e;
   }
 }
 
-export function saveState(filePath: string, state: JobspyState): void {
+export function saveFile(filePath: string, file: JobspyFile): void {
   const tmp = `${filePath}.tmp`;
   try {
-    writeFileSync(tmp, JSON.stringify(state, null, 2));
+    writeFileSync(tmp, JSON.stringify(file, null, 2));
     renameSync(tmp, filePath);
   } catch (e) {
     try { unlinkSync(tmp); } catch { /* best-effort cleanup */ }
     throw e;
   }
-}
-
-/**
- * Merge saved profile params with runtime-supplied params.
- * Runtime values override saved values for every key that is not undefined.
- * Falsy values (false, 0, "") are treated as intentional overrides.
- */
-export function mergeParams(
-  saved: ScrapeJobsParams,
-  runtime: ScrapeJobsParams,
-): ScrapeJobsParams {
-  const merged: ScrapeJobsParams = { ...saved };
-  for (const [key, val] of Object.entries(runtime)) {
-    if (val !== undefined) {
-      (merged as Record<string, unknown>)[key] = val;
-    }
-  }
-  return merged;
 }
 
 export function filterNewJobs(
