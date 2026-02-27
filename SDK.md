@@ -8,6 +8,9 @@ Comprehensive SDK documentation for [jobspy-js](https://github.com/borgius/jobsp
 - [scrapeJobs()](#scrapejobs)
   - [Parameters](#parameters)
   - [Return Value](#return-value)
+- [fetchLinkedInJob()](#fetchlinkedinjob)
+  - [Parameters](#fetchlinkedinjob-parameters)
+  - [Return Value](#fetchlinkedinjob-return-value)
 - [Types & Enums](#types--enums)
   - [Site](#site)
   - [JobType](#jobtype)
@@ -31,6 +34,7 @@ Comprehensive SDK documentation for [jobspy-js](https://github.com/borgius/jobsp
   - [LinkedIn Company Filter](#linkedin-company-filter)
   - [Pagination with Offset](#pagination-with-offset)
   - [Recent Jobs Only](#recent-jobs-only)
+  - [Fetch Single LinkedIn Job](#fetch-single-linkedin-job)
 - [Error Handling](#error-handling)
 - [Exports](#exports)
 
@@ -126,6 +130,62 @@ interface ScrapeJobsResult {
 ```
 
 Returns an object with a `jobs` array. Each job is a flat record (nested objects like `location` and `compensation` are flattened to top-level fields).
+
+---
+
+## fetchLinkedInJob()
+
+Fetch full details for a single LinkedIn job by ID or URL. Useful for getting descriptions, seniority level, and other metadata without running a full search.
+
+```ts
+import { fetchLinkedInJob } from "jobspy-js";
+
+const job = await fetchLinkedInJob("4127292817");
+console.log(job.description);
+console.log(job.job_level);       // e.g. "mid-senior level"
+console.log(job.company_industry); // e.g. "Software Development"
+```
+
+```ts
+// Also accepts full LinkedIn URLs
+const job = await fetchLinkedInJob(
+  "https://www.linkedin.com/jobs/view/4127292817",
+  { format: "plain" },
+);
+```
+
+### fetchLinkedInJob Parameters
+
+```ts
+fetchLinkedInJob(
+  jobIdOrUrl: string,
+  options?: {
+    format?: string;         // "markdown" (default), "html", or "plain"
+    proxies?: string | string[];  // Proxy server(s)
+  },
+): Promise<LinkedInJobDetails>
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `jobIdOrUrl` | `string` | — | LinkedIn job ID (e.g. `"4127292817"`) or full URL (e.g. `"https://www.linkedin.com/jobs/view/4127292817"`) |
+| `options.format` | `string` | `"markdown"` | Description format: `"markdown"`, `"html"`, or `"plain"` |
+| `options.proxies` | `string \| string[]` | — | Proxy server(s) for the request |
+
+### fetchLinkedInJob Return Value
+
+```ts
+interface LinkedInJobDetails {
+  job_url: string;            // Canonical LinkedIn job URL
+  description?: string;       // Full job description (formatted per `format` option)
+  job_level?: string;         // Seniority level (e.g. "mid-senior level")
+  job_type?: string[];        // Employment types (e.g. ["fulltime"])
+  job_function?: string;      // Job function category
+  company_industry?: string;  // Company industry classification
+  company_logo?: string;      // Company logo image URL
+  job_url_direct?: string;    // Direct employer/ATS application URL
+}
+```
 
 ---
 
@@ -556,6 +616,26 @@ const { jobs } = await scrapeJobs({
 });
 ```
 
+### Fetch Single LinkedIn Job
+
+```ts
+import { fetchLinkedInJob } from "jobspy-js";
+
+// By job ID
+const job = await fetchLinkedInJob("4127292817");
+console.log(job.description);
+console.log(job.job_level);        // "mid-senior level"
+console.log(job.job_type);         // ["fulltime"]
+console.log(job.company_industry); // "Software Development"
+console.log(job.job_url_direct);   // direct application URL
+
+// By URL with plain text format
+const job2 = await fetchLinkedInJob(
+  "https://www.linkedin.com/jobs/view/4127292817",
+  { format: "plain", proxies: "user:pass@proxy.example.com:8080" },
+);
+```
+
 ---
 
 ## Error Handling
@@ -594,8 +674,8 @@ const { jobs } = await scrapeJobs({
 Everything exported from `"jobspy-js"`:
 
 ```ts
-// Main function
-export { scrapeJobs } from "./scraper";
+// Main functions
+export { scrapeJobs, fetchLinkedInJob } from "./scraper";
 
 // Enums
 export { Site, JobType, CompensationInterval, DescriptionFormat, SalarySource } from "./types";
@@ -603,6 +683,7 @@ export { Site, JobType, CompensationInterval, DescriptionFormat, SalarySource } 
 // Types
 export type { JobPost, JobResponse, Compensation, Location } from "./types";
 export type { ScrapeJobsParams, ScraperInput, Country } from "./types";
+export type { LinkedInJobDetails } from "./scraper";
 
 // Constants & helpers
 export { DESIRED_COLUMNS, getCountry, displayLocation } from "./types";

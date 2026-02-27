@@ -341,3 +341,56 @@ function flattenJob(
 
   return record;
 }
+
+export interface LinkedInJobDetails {
+  job_url: string;
+  description?: string;
+  job_level?: string;
+  job_type?: string[];
+  job_function?: string;
+  company_industry?: string;
+  company_logo?: string;
+  job_url_direct?: string;
+}
+
+/**
+ * Fetch full details for a LinkedIn job by ID or URL.
+ *
+ * @example
+ * ```ts
+ * import { fetchLinkedInJob } from "jobspy-js";
+ *
+ * const job = await fetchLinkedInJob("4127292817");
+ * console.log(job.description);
+ * ```
+ */
+export async function fetchLinkedInJob(
+  jobIdOrUrl: string,
+  options: { format?: string; proxies?: string | string[] } = {},
+): Promise<LinkedInJobDetails> {
+  // Extract job ID from URL if needed
+  const jobId = jobIdOrUrl.replace(/\/$/, "").split("/").pop()!.split("?")[0];
+
+  const linkedin = new LinkedIn({ proxies: options.proxies });
+  await linkedin.initSession();
+  // Set scraper_input so getJobDetails knows the description format
+  (linkedin as any).scraper_input = {
+    description_format: (options.format as DescriptionFormat) ?? DescriptionFormat.MARKDOWN,
+  };
+
+  try {
+    const details = await linkedin.getJobDetails(jobId);
+    return {
+      job_url: `https://www.linkedin.com/jobs/view/${jobId}`,
+      description: details.description,
+      job_level: details.job_level?.toLowerCase(),
+      job_type: details.job_type,
+      job_function: details.job_function,
+      company_industry: details.company_industry,
+      company_logo: details.company_logo,
+      job_url_direct: details.job_url_direct,
+    };
+  } finally {
+    await linkedin.close().catch(() => {});
+  }
+}

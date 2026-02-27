@@ -46,8 +46,9 @@ npm install jobspy-js
 > **Full SDK reference:** See [SDK.md](https://github.com/borgius/jobspy-js/blob/master/SDK.md) for complete documentation — all parameters, types, enums, output fields, proxy configuration, country support, and advanced examples.
 
 ```ts
-import { scrapeJobs } from "jobspy-js";
+import { scrapeJobs, fetchLinkedInJob } from "jobspy-js";
 
+// Scrape multiple job boards
 const result = await scrapeJobs({
   site_name: ["indeed", "linkedin"],
   search_term: "software engineer",
@@ -59,6 +60,10 @@ console.log(`Found ${result.jobs.length} jobs`);
 for (const job of result.jobs) {
   console.log(`${job.title} at ${job.company} — ${job.job_url}`);
 }
+
+// Fetch details for a single LinkedIn job
+const details = await fetchLinkedInJob("4127292817");
+console.log(details.description);
 ```
 
 ### Parameters
@@ -81,6 +86,27 @@ for (const job of result.jobs) {
 | `profile` | `string` | — | Named profile for dedup tracking |
 | `skip_dedup` | `boolean` | `false` | Skip dedup filtering (still updates state) |
 
+### fetchLinkedInJob()
+
+Fetch full details for a single LinkedIn job by ID or URL:
+
+```ts
+import { fetchLinkedInJob } from "jobspy-js";
+
+const job = await fetchLinkedInJob("4127292817");
+// or: fetchLinkedInJob("https://www.linkedin.com/jobs/view/4127292817")
+
+console.log(job.description);        // full job description (markdown)
+console.log(job.job_level);          // "mid-senior level"
+console.log(job.job_type);           // ["fulltime"]
+console.log(job.company_industry);   // "Software Development"
+console.log(job.job_url_direct);     // direct application URL
+```
+
+Options: `{ format?: "markdown"|"html"|"plain", proxies?: string|string[] }`
+
+> **Full reference:** See [SDK.md](https://github.com/borgius/jobspy-js/blob/master/SDK.md#fetchlinkedinjob) for all fields and examples.
+
 ## CLI
 
 ### Quick Start
@@ -97,6 +123,10 @@ jobspy -s indeed -q "python" --enforce-annual-salary -o jobs.csv
 
 # Google Careers (jobs at Google)
 jobspy -s google_careers -q "software engineer" -l "USA" -n 10
+
+# Fetch full details for a single LinkedIn job
+jobspy --describe 4127292817
+jobspy --describe https://www.linkedin.com/jobs/view/4127292817
 ```
 
 ### All CLI Options
@@ -127,6 +157,7 @@ jobspy -s google_careers -q "software engineer" -l "USA" -n 10
 | `--all` | | `false` | Skip dedup for this run (still updates state) |
 | `--list-profiles` | | — | List all saved profiles |
 | `--init` | | — | Generate a `jobspy.json` with sample profiles |
+| `--describe <jobId>` | | — | Fetch full LinkedIn job details by ID or URL |
 
 ## Config File (`jobspy.json`)
 

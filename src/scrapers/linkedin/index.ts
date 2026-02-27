@@ -202,7 +202,7 @@ export class LinkedIn extends Scraper {
     };
   }
 
-  private async getJobDetails(jobId: string): Promise<Record<string, any>> {
+  async getJobDetails(jobId: string): Promise<Record<string, any>> {
     try {
       const response = await this.session.fetch(
         `${this.baseUrl}/jobs/view/${jobId}`,

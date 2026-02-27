@@ -15,7 +15,7 @@ export abstract class Scraper {
     this.proxyRotator = new ProxyRotator(options.proxies);
   }
 
-  protected async initSession(browser?: string, insecure?: boolean) {
+  async initSession(browser?: string, insecure?: boolean) {
     const proxy = this.proxyRotator.next();
     this.session = await createHttpSession({
       proxies: proxy ? [proxy] : undefined,

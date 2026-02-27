@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { scrapeJobs } from "../scraper";
+import { scrapeJobs, fetchLinkedInJob } from "../scraper";
 import { writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -58,6 +58,7 @@ program
   .option("--all", "Skip dedup for this run (still updates state)")
   .option("--list-profiles", "List saved profiles and their last run time")
   .option("--init", "Generate a jobspy.json with sample profiles")
+  .option("--describe <jobId>", "Fetch full LinkedIn job details by ID or URL")
   .action(async (opts) => {
     if (opts.init) {
       const filePath = resolve(process.cwd(), "jobspy.json");
@@ -119,6 +120,19 @@ program
       };
       writeFileSync(filePath, JSON.stringify(defaultFile, null, 2) + "\n");
       console.log(`Created ${filePath}`);
+      return;
+    }
+
+    if (opts.describe) {
+      try {
+        const details = await fetchLinkedInJob(opts.describe, {
+          format: opts.format,
+        });
+        console.log(JSON.stringify(details, null, 2));
+      } catch (e: unknown) {
+        console.error(`Error: ${e instanceof Error ? e.message : String(e)}`);
+        process.exit(1);
+      }
       return;
     }
 
