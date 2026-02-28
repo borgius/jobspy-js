@@ -83,6 +83,47 @@ export class ZipRecruiter extends Scraper {
     return { jobs: jobList.slice(0, resultsWanted) };
   }
 
+  /**
+   * Fetch a single ZipRecruiter job by its listing key.
+   */
+  async fetchJob(id: string, format: DescriptionFormat): Promise<JobPost | null> {
+    await this.initSession("chrome_130");
+    this.scraper_input = { site_type: [], description_format: format };
+
+    const jobUrl = `${this.baseUrl}/jobs//j?lvk=${id}`;
+    try {
+      const res = await this.session.fetch(jobUrl, { headers: WEB_HEADERS });
+      if (!res.ok) return null;
+      const html = await res.text();
+      const $ = cheerio.load(html);
+      const raw = $('script[type="application/json"]').first().text();
+      if (!raw) return null;
+
+      const data = JSON.parse(raw) as any;
+      const details = data.getJobDetailsResponse?.jobDetails;
+      if (!details) return null;
+
+      let description = details.htmlFullDescription ?? "";
+      if (description && format === DescriptionFormat.MARKDOWN) {
+        description = markdownConverter(description) ?? description;
+      }
+
+      return {
+        id: `zr-${id}`,
+        title: details.title ?? "ZipRecruiter Job",
+        company_name: details.hiringCompany?.name,
+        job_url: jobUrl,
+        description: description || undefined,
+        emails: extractEmails(description),
+        job_url_direct: details.externalApplyUrl || undefined,
+      };
+    } catch {
+      return null;
+    } finally {
+      await this.close().catch(() => {});
+    }
+  }
+
   private async findJobsInPage(
     input: ScraperInput,
     page: number,
@@ -188,7 +229,8 @@ export class ZipRecruiter extends Scraper {
     const intervalNum: number = pay.interval ?? 0;
     const interval = PAY_INTERVAL_MAP[intervalNum];
     const compensation: Compensation = {
-      interval,
+      // interval comes from a map of strings; cast to satisfy the enum type
+      interval: interval as any,
       min_amount: pay.min != null ? Math.floor(pay.min) : undefined,
       max_amount: pay.max != null ? Math.floor(pay.max) : undefined,
       currency: "USD",

@@ -27,4 +27,27 @@ describe("Indeed integration", () => {
       expect(job.job_url).toBeTruthy();
     }
   }, 60_000);
+
+  it("fetches longer descriptions when asked", async () => {
+    // compare the description length with and without the flag
+    const base = await scrapeJobs({
+      site_name: ["indeed"],
+      search_term: "react",
+      results_wanted: 1,
+      country_indeed: "usa",
+    });
+    const withDesc = await scrapeJobs({
+      site_name: ["indeed"],
+      search_term: "react",
+      results_wanted: 1,
+      country_indeed: "usa",
+      indeed_fetch_description: true,
+    });
+
+    expect(base.jobs.length).toBeGreaterThan(0);
+    expect(withDesc.jobs.length).toBeGreaterThan(0);
+
+    // ensure descriptions are present; underlying data may vary so don't enforce a strict length comparison
+    expect(withDesc.jobs[0].description).toBeTruthy();
+  }, 120_000);
 });

@@ -46,7 +46,7 @@ npm install jobspy-js
 > **Full SDK reference:** See [SDK.md](https://github.com/borgius/jobspy-js/blob/master/SDK.md) for complete documentation — all parameters, types, enums, output fields, proxy configuration, country support, and advanced examples.
 
 ```ts
-import { scrapeJobs, fetchLinkedInJob } from "jobspy-js";
+import { scrapeJobs, fetchLinkedInJob, fetchJobDetails } from "jobspy-js";
 
 // Scrape multiple job boards
 const result = await scrapeJobs({
@@ -64,6 +64,10 @@ for (const job of result.jobs) {
 // Fetch details for a single LinkedIn job
 const details = await fetchLinkedInJob("4127292817");
 console.log(details.description);
+
+// Fetch full job details by ID for any provider
+const job = await fetchJobDetails("indeed", "fdde406379455a1e");
+console.log(job.description);
 ```
 
 ### Parameters
@@ -107,6 +111,31 @@ Options: `{ format?: "markdown"|"html"|"plain", proxies?: string|string[] }`
 
 > **Full reference:** See [SDK.md](https://github.com/borgius/jobspy-js/blob/master/SDK.md#fetchlinkedinjob) for all fields and examples.
 
+### fetchJobDetails()
+
+Fetch full details for a single job by ID on **any** provider:
+
+```ts
+import { fetchJobDetails } from "jobspy-js";
+
+// Works with any supported site
+const job = await fetchJobDetails("indeed", "fdde406379455a1e");
+// also: fetchJobDetails("linkedin", "4127292817")
+// also: fetchJobDetails("glassdoor", "123456789")
+// also: fetchJobDetails("zip_recruiter", "some-listing-key")
+// also: fetchJobDetails("bayt", "/en/job-title-1234567")
+// also: fetchJobDetails("naukri", "123456789")
+// also: fetchJobDetails("bdjobs", "123456")
+
+console.log(job.description);  // full job description
+console.log(job.title);        // job title
+console.log(job.company);      // company name
+```
+
+Options: `{ format?: "markdown"|"html"|"plain", proxies?: string|string[], country?: string }`
+
+> **Full reference:** See [SDK.md](https://github.com/borgius/jobspy-js/blob/master/SDK.md#fetchjobdetails) for all fields and examples.
+
 ## CLI
 
 ### Quick Start
@@ -127,6 +156,10 @@ jobspy -s google_careers -q "software engineer" -l "USA" -n 10
 # Fetch full details for a single LinkedIn job
 jobspy --describe 4127292817
 jobspy --describe https://www.linkedin.com/jobs/view/4127292817
+
+# Fetch full job details by ID for any provider
+jobspy -s indeed --id fdde406379455a1e
+jobspy -s glassdoor --id 123456789
 ```
 
 ### All CLI Options
@@ -147,6 +180,7 @@ jobspy --describe https://www.linkedin.com/jobs/view/4127292817
 | `-p, --proxies <proxies...>` | | — | Proxy servers |
 | `--format <format>` | | `markdown` | Description format: `markdown`, `html`, `plain` |
 | `--linkedin-fetch-description` | | `false` | Fetch full LinkedIn descriptions |
+| `--indeed-fetch-description` | | `false` | Fetch full Indeed job pages/Direct-link descriptions |
 | `--linkedin-company-ids <ids...>` | | — | Filter by LinkedIn company IDs |
 | `--offset <offset>` | | `0` | Pagination offset |
 | `--hours-old <hours>` | | — | Only jobs posted within N hours |
@@ -158,6 +192,7 @@ jobspy --describe https://www.linkedin.com/jobs/view/4127292817
 | `--list-profiles` | | — | List all saved profiles |
 | `--init` | | — | Generate a `jobspy.json` with sample profiles |
 | `--describe <jobId>` | | — | Fetch full LinkedIn job details by ID or URL |
+| `--id <jobId>` | | — | Fetch full job details by ID (requires `-s/--site`) |
 
 ## Config File (`jobspy.json`)
 
@@ -187,6 +222,7 @@ This creates a `jobspy.json` in the current directory with two sample profiles:
         "country": "usa",
         "format": "markdown",
         "linkedin_fetch_description": true,
+        "indeed_fetch_description": false,
         "hours_old": 72,
         "enforce_annual_salary": true,
         "verbose": 1,
@@ -202,6 +238,7 @@ This creates a `jobspy.json` in the current directory with two sample profiles:
         "job_type": "fulltime",
         "results": 50,
         "hours_old": 48,
+        "indeed_fetch_description": false,
         "output": "backend-jobs.json"
       }
     }

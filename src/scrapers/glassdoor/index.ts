@@ -91,6 +91,40 @@ export class Glassdoor extends Scraper {
     return { jobs: jobList.slice(0, resultsWanted) };
   }
 
+  /**
+   * Fetch full details for a single Glassdoor job by its listing ID.
+   */
+  async fetchJob(id: string, format: DescriptionFormat): Promise<JobPost | null> {
+    await this.initSession("chrome_138");
+    this.scraper_input = { site_type: [], description_format: format };
+    // Default to US Glassdoor
+    this.baseUrl = "https://www.glassdoor.com/";
+    this.seenUrls.clear();
+
+    const token = await this.getCsrfToken();
+    const headers = {
+      ...HEADERS,
+      "gd-csrf-token": token ?? FALLBACK_TOKEN,
+    };
+
+    try {
+      const description = await this.fetchDescription(parseInt(id), headers);
+      const jobUrl = `${this.baseUrl}job-listing/j?jl=${id}`;
+
+      return {
+        id: `gd-${id}`,
+        title: "Glassdoor Job",
+        job_url: jobUrl,
+        description,
+        emails: extractEmails(description),
+      };
+    } catch {
+      return null;
+    } finally {
+      await this.close().catch(() => {});
+    }
+  }
+
   private async getCsrfToken(): Promise<string | null> {
     // Glassdoor embeds the CSRF token as `"token": "..."` in the HTML of any page.
     // The token has the format xxx:yyy:zzz and must be sent as gd-csrf-token on API calls.

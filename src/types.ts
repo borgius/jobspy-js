@@ -182,6 +182,7 @@ export interface ScraperInput {
   easy_apply?: boolean;
   offset?: number;
   linkedin_fetch_description?: boolean;
+  indeed_fetch_description?: boolean;
   linkedin_company_ids?: number[];
   description_format?: DescriptionFormat;
   results_wanted?: number;
@@ -202,6 +203,7 @@ export interface ScrapeJobsParams {
   proxies?: string | string[];
   description_format?: string;
   linkedin_fetch_description?: boolean;
+  indeed_fetch_description?: boolean;
   linkedin_company_ids?: number[];
   offset?: number;
   hours_old?: number;

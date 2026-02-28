@@ -130,6 +130,36 @@ export class LinkedIn extends Scraper {
     return { jobs: jobList.slice(0, resultsWanted) };
   }
 
+  /**
+   * Fetch full details for a single LinkedIn job by its numeric ID.
+   */
+  async fetchJob(id: string, format: DescriptionFormat): Promise<JobPost | null> {
+    await this.initSession();
+    this.scraper_input = { site_type: [], description_format: format };
+
+    try {
+      const details = await this.getJobDetails(id);
+      if (!details.description && !details.job_level) return null;
+      return {
+        id: `li-${id}`,
+        title: details.description ? "LinkedIn Job" : "N/A",
+        job_url: `${this.baseUrl}/jobs/view/${id}`,
+        description: details.description,
+        job_level: details.job_level?.toLowerCase(),
+        job_type: details.job_type,
+        job_function: details.job_function,
+        company_industry: details.company_industry,
+        company_logo: details.company_logo,
+        job_url_direct: details.job_url_direct,
+        emails: extractEmails(details.description),
+      };
+    } catch {
+      return null;
+    } finally {
+      await this.close().catch(() => {});
+    }
+  }
+
   private async processJob(
     $: cheerio.CheerioAPI,
     card: cheerio.Cheerio<any>,

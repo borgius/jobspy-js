@@ -6,8 +6,9 @@ import {
   type ScraperInput,
   type Location,
   Site,
+  DescriptionFormat,
 } from "../../types";
-import { createLogger, randomSleep } from "../../utils";
+import { createLogger, randomSleep, markdownConverter, extractEmails } from "../../utils";
 
 const log = createLogger("Bayt");
 
@@ -51,6 +52,44 @@ export class Bayt extends Scraper {
 
     await this.close();
     return { jobs: jobList.slice(0, resultsWanted) };
+  }
+
+  /**
+   * Fetch a single Bayt job by scraping its detail page.
+   * The id is the URL path segment (e.g. "software-engineer-1234567").
+   */
+  async fetchJob(id: string, format: DescriptionFormat): Promise<JobPost | null> {
+    await this.initSession();
+
+    // Try as both a direct path and a numeric suffix
+    const jobUrl = id.startsWith("http")
+      ? id
+      : `${this.baseUrl}/en/international/jobs/${id}`;
+
+    try {
+      const res = await this.session.fetch(jobUrl);
+      if (!res.ok) return null;
+      const html = await res.text();
+      const $ = cheerio.load(html);
+
+      const title = $("h1").first().text().trim() || "Bayt Job";
+      let description = $("div[class*='jobDescription'], div[class*='job-description'], .content_inner").first().html();
+      if (description && format === DescriptionFormat.MARKDOWN) {
+        description = markdownConverter(description) ?? description;
+      }
+
+      return {
+        id: `bayt-${Math.abs(hashCode(jobUrl))}`,
+        title,
+        job_url: jobUrl,
+        description: description || undefined,
+        emails: extractEmails(description),
+      };
+    } catch {
+      return null;
+    } finally {
+      await this.close().catch(() => {});
+    }
   }
 
   private async fetchJobs(

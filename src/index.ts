@@ -16,4 +16,4 @@ export {
   displayLocation,
 } from "./types";
 
-export { scrapeJobs, fetchLinkedInJob, type LinkedInJobDetails } from "./scraper";
+export { scrapeJobs, fetchLinkedInJob, fetchJobDetails, type LinkedInJobDetails } from "./scraper";

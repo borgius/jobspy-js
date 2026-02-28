@@ -11,6 +11,7 @@ import {
   DescriptionFormat,
   getJobTypeFromString,
   getCompensationInterval,
+  getCountry,
 } from "../../types";
 import {
   createLogger,
@@ -19,6 +20,49 @@ import {
 } from "../../utils";
 
 const log = createLogger("Indeed");
+
+const JOB_DETAIL_QUERY = `
+  query GetJobData {
+    jobSearch(
+      what: ""
+      limit: 1
+      filters: {
+        keyword: { field: "key", keys: ["{jobKey}"] }
+      }
+    ) {
+      results {
+        job {
+          key
+          title
+          datePublished
+          description { html }
+          location {
+            countryName countryCode admin1Code city postalCode streetAddress
+            formatted { short long }
+          }
+          compensation {
+            estimated { currencyCode baseSalary { unitOfWork range { ... on Range { min max } } } }
+            baseSalary { unitOfWork range { ... on Range { min max } } }
+            currencyCode
+          }
+          attributes { key label }
+          employer {
+            relativeCompanyPageUrl name
+            dossier {
+              employerDetails {
+                addresses industry employeesLocalizedLabel revenueLocalizedLabel
+                briefDescription ceoName ceoPhotoUrl
+              }
+              images { headerImageUrl squareLogoUrl }
+              links { corporateWebsite }
+            }
+          }
+          recruit { viewJobUrl detailedSalary workSchedule }
+        }
+      }
+    }
+  }
+`;
 
 export class Indeed extends Scraper {
   private apiUrl = "https://apis.indeed.com/graphql";
@@ -65,6 +109,93 @@ export class Indeed extends Scraper {
     return { jobs: jobList.slice(offset, offset + resultsWanted) };
   }
 
+  /**
+   * Fetch a single Indeed job by its key (the part after "in-" in the job id).
+   */
+  async fetchJob(id: string, format: DescriptionFormat): Promise<JobPost | null> {
+    const country = getCountry("usa");
+    this.baseUrl = `https://${country!.indeed_domain}.indeed.com`;
+    this.apiCountryCode = country!.indeed_api_code;
+    this.scraper_input = { site_type: [], description_format: format };
+
+    await this.initSession("safari_ios_16.5");
+
+    const query = JOB_DETAIL_QUERY.replace("{jobKey}", id);
+    const headers = { ...API_HEADERS, "indeed-co": this.apiCountryCode };
+
+    try {
+      const response = await this.session.fetch(this.apiUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ query }),
+      });
+      if (!response.ok) return null;
+      const data = (await response.json()) as any;
+      const results = data?.data?.jobSearch?.results ?? [];
+      if (!results.length) return null;
+
+      const job = results[0].job;
+
+      // Also try to fetch full description from page
+      let description = job.description?.html;
+      if (format === DescriptionFormat.MARKDOWN) {
+        description = markdownConverter(description);
+      }
+
+      const directUrl = job.recruit?.viewJobUrl;
+      const pageUrl = `${this.baseUrl}/viewjob?jk=${job.key}`;
+      try {
+        const fullDesc = await this.fetchFullDescription(directUrl || pageUrl);
+        if (fullDesc) description = fullDesc;
+      } catch { /* ignore */ }
+
+      const jobType = this.getJobType(job.attributes ?? []);
+      const ts = job.datePublished / 1000;
+      const datePosted = new Date(ts * 1000).toISOString().split("T")[0];
+      const employer = job.employer?.dossier;
+      const employerDetails = employer?.employerDetails ?? {};
+      const relUrl = job.employer?.relativeCompanyPageUrl;
+      const compensation = this.getCompensation(job.compensation);
+      const location: Location = {
+        city: job.location?.city,
+        state: job.location?.admin1Code,
+        country: job.location?.countryCode,
+      };
+      const industry = employerDetails.industry
+        ? employerDetails.industry.replace(/Iv1/g, "").replace(/_/g, " ").trim()
+            .split(" ").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ")
+        : undefined;
+
+      return {
+        id: `in-${job.key}`,
+        title: job.title,
+        description,
+        company_name: job.employer?.name,
+        company_url: relUrl ? `${this.baseUrl}${relUrl}` : undefined,
+        company_url_direct: employer?.links?.corporateWebsite,
+        location,
+        job_type: jobType.length > 0 ? jobType : undefined,
+        compensation,
+        date_posted: datePosted,
+        job_url: pageUrl,
+        job_url_direct: directUrl,
+        emails: extractEmails(description),
+        is_remote: this.isRemote(job, description ?? ""),
+        company_addresses: employerDetails.addresses?.[0],
+        company_industry: industry,
+        company_num_employees: employerDetails.employeesLocalizedLabel,
+        company_revenue: employerDetails.revenueLocalizedLabel,
+        company_description: employerDetails.briefDescription,
+        company_logo: employer?.images?.squareLogoUrl,
+      };
+    } catch (e: any) {
+      log.error(`fetchJob failed: ${e.message}`);
+      return null;
+    } finally {
+      await this.close().catch(() => {});
+    }
+  }
+
   private async scrapePage(
     cursor: string | null,
   ): Promise<{ jobs: JobPost[]; cursor: string | null }> {
@@ -106,7 +237,7 @@ export class Indeed extends Scraper {
 
       const jobs: JobPost[] = [];
       for (const result of results) {
-        const job = this.processJob(result.job);
+        const job = await this.processJob(result.job);
         if (job) jobs.push(job);
       }
       return { jobs, cursor: nextCursor };
@@ -165,16 +296,30 @@ export class Indeed extends Scraper {
     return "";
   }
 
-  private processJob(job: any): JobPost | null {
+  private async processJob(job: any): Promise<JobPost | null> {
     const jobUrl = `${this.baseUrl}/viewjob?jk=${job.key}`;
     if (this.seenUrls.has(jobUrl)) return null;
     this.seenUrls.add(jobUrl);
 
+    // base description from API (may be truncated)
     let description = job.description?.html;
     if (
       this.scraper_input.description_format === DescriptionFormat.MARKDOWN
     ) {
       description = markdownConverter(description);
+    }
+
+    // optionally fetch full description from job page or direct link
+    if (this.scraper_input.indeed_fetch_description) {
+      const targetUrl = job.recruit?.viewJobUrl || jobUrl;
+      try {
+        const fullDesc = await this.fetchFullDescription(targetUrl);
+        if (fullDesc) {
+          description = fullDesc;
+        }
+      } catch {
+        // ignore failures
+      }
     }
 
     const jobType = this.getJobType(job.attributes ?? []);
@@ -225,6 +370,23 @@ export class Indeed extends Scraper {
       company_description: employerDetails.briefDescription,
       company_logo: employer?.images?.squareLogoUrl,
     };
+  }
+
+  private async fetchFullDescription(url: string): Promise<string | undefined> {
+    try {
+      const res = await this.session.fetch(url, { timeout: 10000 });
+      if (!res.ok) return undefined;
+      const html = await res.text();
+      // look for main description element using id commonly found on Indeed pages
+      const match = html.match(/<div[^>]+id=["']?jobDescriptionText["']?[^>]*>([\s\S]*?)<\/div>/i);
+      let desc = match ? match[1] : undefined;
+      if (desc && this.scraper_input.description_format === DescriptionFormat.MARKDOWN) {
+        desc = markdownConverter(desc);
+      }
+      return desc;
+    } catch {
+      return undefined;
+    }
   }
 
   private getJobType(attributes: any[]): JobType[] {

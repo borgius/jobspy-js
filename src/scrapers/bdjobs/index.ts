@@ -60,6 +60,42 @@ export class BDJobs extends Scraper {
     return { jobs: jobList.slice(0, resultsWanted) };
   }
 
+  /**
+   * Fetch a single BDJobs job by its job ID.
+   */
+  async fetchJob(id: string, format: DescriptionFormat): Promise<JobPost | null> {
+    await this.initSession();
+    this.scraper_input = { site_type: [], description_format: format };
+
+    const jobUrl = `${this.jobDetailsBaseUrl}${id}`;
+    try {
+      const res = await this.session.fetch(jobUrl, { headers: HEADERS });
+      if (!res.ok) return null;
+      const html = await res.text();
+
+      // BDJobs detail pages can be JSON API or HTML; try to extract what we can
+      let description: string | undefined;
+      const match = html.match(/<div[^>]+class=["']?job-description["']?[^>]*>([\s\S]*?)<\/div>/i);
+      if (match) {
+        description = match[1];
+        if (format === DescriptionFormat.MARKDOWN) {
+          description = markdownConverter(description) ?? description;
+        }
+      }
+
+      return {
+        id: `bdjobs-${id}`,
+        title: "BDJobs Job",
+        job_url: jobUrl,
+        description,
+      };
+    } catch {
+      return null;
+    } finally {
+      await this.close().catch(() => {});
+    }
+  }
+
   private async fetchPage(input: ScraperInput, page: number): Promise<JobPost[]> {
     const params = new URLSearchParams();
     if (input.search_term) params.set("txtsearch", input.search_term);

@@ -95,6 +95,44 @@ export class Naukri extends Scraper {
     return { jobs: jobList.slice(0, resultsWanted) };
   }
 
+  /**
+   * Fetch a single Naukri job by its job ID.
+   */
+  async fetchJob(id: string, format: DescriptionFormat): Promise<JobPost | null> {
+    await this.initSession();
+    this.scraper_input = { site_type: [], description_format: format };
+
+    try {
+      const res = await this.session.fetch(
+        `https://www.naukri.com/jobapi/v4/job/${id}`,
+        { headers: HEADERS, timeout: 10000 } as any,
+      );
+      if (!res.ok) return null;
+      const data = (await res.json()) as any;
+      const job = data?.jobDetails ?? data;
+      if (!job) return null;
+
+      let description = job.description ?? job.jobDescription ?? undefined;
+      if (description && format === DescriptionFormat.MARKDOWN) {
+        description = markdownConverter(description);
+      }
+
+      const jobUrl = `https://www.naukri.com/job/${id}`;
+      return {
+        id: `nk-${id}`,
+        title: job.title ?? "Naukri Job",
+        company_name: job.companyName ?? job.company,
+        job_url: jobUrl,
+        description,
+        emails: extractEmails(description ?? ""),
+      };
+    } catch {
+      return null;
+    } finally {
+      await this.close().catch(() => {});
+    }
+  }
+
   private processJob(job: any, jobId: string): JobPost | null {
     const title = job.title ?? "N/A";
     const company = job.companyName ?? "N/A";

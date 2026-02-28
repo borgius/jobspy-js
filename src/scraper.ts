@@ -166,6 +166,7 @@ export async function scrapeJobs(
     easy_apply: params.easy_apply,
     offset: params.offset ?? 0,
     linkedin_fetch_description: params.linkedin_fetch_description ?? false,
+    indeed_fetch_description: params.indeed_fetch_description ?? false,
     linkedin_company_ids: params.linkedin_company_ids,
     description_format: descFormat,
     results_wanted: params.results_wanted ?? 15,
@@ -351,6 +352,41 @@ export interface LinkedInJobDetails {
   company_industry?: string;
   company_logo?: string;
   job_url_direct?: string;
+}
+
+/**
+ * Fetch full details for a job by site and ID.
+ * Works with any supported provider.
+ *
+ * @example
+ * ```ts
+ * import { fetchJobDetails } from "jobspy-js";
+ *
+ * const job = await fetchJobDetails("indeed", "fdde406379455a1e");
+ * console.log(job?.description);
+ * ```
+ */
+export async function fetchJobDetails(
+  site: string,
+  jobId: string,
+  options: { format?: string; proxies?: string | string[]; country?: string } = {},
+): Promise<FlatJobRecord | null> {
+  const siteEnum = mapStrToSite(site);
+  const ScraperClass = SCRAPER_MAP[siteEnum];
+  if (!ScraperClass) throw new Error(`Unknown site: ${site}`);
+
+  const scraper = new ScraperClass({ proxies: options.proxies });
+  const format = (options.format as DescriptionFormat) ?? DescriptionFormat.MARKDOWN;
+
+  try {
+    const job = await scraper.fetchJob(jobId, format);
+    if (!job) return null;
+
+    const country = getCountry(options.country ?? "usa");
+    return flattenJob(job, siteEnum as string, country.name, {});
+  } finally {
+    await scraper.close().catch(() => {});
+  }
 }
 
 /**

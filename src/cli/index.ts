@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { scrapeJobs, fetchLinkedInJob } from "../scraper";
+import { scrapeJobs, fetchLinkedInJob, fetchJobDetails } from "../scraper";
 import { writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -42,6 +42,7 @@ program
     "markdown",
   )
   .option("--linkedin-fetch-description", "Fetch full LinkedIn descriptions")
+  .option("--indeed-fetch-description", "Fetch full Indeed descriptions")
   .option(
     "--linkedin-company-ids <ids...>",
     "LinkedIn company IDs to filter",
@@ -59,6 +60,7 @@ program
   .option("--list-profiles", "List saved profiles and their last run time")
   .option("--init", "Generate a jobspy.json with sample profiles")
   .option("--describe <jobId>", "Fetch full LinkedIn job details by ID or URL")
+  .option("--id <jobId>", "Fetch full job details by ID (requires -s/--site)")
   .action(async (opts) => {
     if (opts.init) {
       const filePath = resolve(process.cwd(), "jobspy.json");
@@ -129,6 +131,31 @@ program
           format: opts.format,
         });
         console.log(JSON.stringify(details, null, 2));
+      } catch (e: unknown) {
+        console.error(`Error: ${e instanceof Error ? e.message : String(e)}`);
+        process.exit(1);
+      }
+      return;
+    }
+
+    if (opts.id) {
+      const sites = opts.site;
+      if (!sites || !sites.length) {
+        console.error("Error: --id requires -s/--site (e.g. -s indeed --id abc123)");
+        process.exit(1);
+      }
+      const site = Array.isArray(sites) ? sites[0] : sites;
+      try {
+        const job = await fetchJobDetails(site, opts.id, {
+          format: opts.format,
+          proxies: opts.proxies,
+          country: opts.country,
+        });
+        if (!job) {
+          console.error("Job not found");
+          process.exit(1);
+        }
+        console.log(JSON.stringify(job, null, 2));
       } catch (e: unknown) {
         console.error(`Error: ${e instanceof Error ? e.message : String(e)}`);
         process.exit(1);

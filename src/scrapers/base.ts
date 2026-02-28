@@ -1,5 +1,5 @@
 import type { Session } from "wreq-js";
-import type { JobResponse, ScraperInput, Site } from "../types";
+import type { DescriptionFormat, JobPost, JobResponse, ScraperInput, Site } from "../types";
 import { ProxyRotator, createHttpSession } from "../utils";
 
 export abstract class Scraper {
@@ -32,6 +32,17 @@ export abstract class Scraper {
   }
 
   abstract scrape(input: ScraperInput): Promise<JobResponse>;
+
+  /**
+   * Fetch full details for a single job by its provider-specific ID.
+   * Subclasses should override this to provide per-provider implementation.
+   */
+  async fetchJob(
+    _id: string,
+    _format: DescriptionFormat,
+  ): Promise<JobPost | null> {
+    throw new Error(`fetchJob not supported for ${this.site}`);
+  }
 
   async close() {
     if (this.session) {

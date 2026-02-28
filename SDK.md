@@ -11,6 +11,10 @@ Comprehensive SDK documentation for [jobspy-js](https://github.com/borgius/jobsp
 - [fetchLinkedInJob()](#fetchlinkedinjob)
   - [Parameters](#fetchlinkedinjob-parameters)
   - [Return Value](#fetchlinkedinjob-return-value)
+- [fetchJobDetails()](#fetchjobdetails)
+  - [Parameters](#fetchjobdetails-parameters)
+  - [Return Value](#fetchjobdetails-return-value)
+  - [Supported Sites](#fetchjobdetails-supported-sites)
 - [Types & Enums](#types--enums)
   - [Site](#site)
   - [JobType](#jobtype)
@@ -35,6 +39,7 @@ Comprehensive SDK documentation for [jobspy-js](https://github.com/borgius/jobsp
   - [Pagination with Offset](#pagination-with-offset)
   - [Recent Jobs Only](#recent-jobs-only)
   - [Fetch Single LinkedIn Job](#fetch-single-linkedin-job)
+  - [Fetch Job by ID (Any Provider)](#fetch-job-by-id-any-provider)
 - [Error Handling](#error-handling)
 - [Exports](#exports)
 
@@ -92,6 +97,7 @@ interface ScrapeJobsParams {
   proxies?:                     string | string[];
   description_format?:          string;
   linkedin_fetch_description?:  boolean;
+  indeed_fetch_description?:    boolean;
   linkedin_company_ids?:        number[];
   offset?:                      number;
   hours_old?:                   number;
@@ -115,6 +121,7 @@ interface ScrapeJobsParams {
 | `proxies` | `string \| string[]` | — | Proxy server(s) for rotating requests. See [Proxy Configuration](#proxy-configuration). |
 | `description_format` | `string` | `"markdown"` | Format for job descriptions: `"markdown"`, `"html"`, or `"plain"`. |
 | `linkedin_fetch_description` | `boolean` | `false` | Fetch full job descriptions from LinkedIn (requires an extra HTTP request per job — slower). |
+| `indeed_fetch_description` | `boolean` | `false` | Visit the Indeed job page or direct link to scrape the full description. |
 | `linkedin_company_ids` | `number[]` | — | Filter LinkedIn results to specific company IDs. |
 | `offset` | `number` | `0` | Skip the first N results (pagination offset). |
 | `hours_old` | `number` | — | Only return jobs posted within the last N hours. |
@@ -186,6 +193,73 @@ interface LinkedInJobDetails {
   job_url_direct?: string;    // Direct employer/ATS application URL
 }
 ```
+
+---
+
+## fetchJobDetails()
+
+Fetch full details for a single job by ID on **any** supported provider. This is a universal alternative to `fetchLinkedInJob()` that works across all scrapers.
+
+```ts
+import { fetchJobDetails } from "jobspy-js";
+
+const job = await fetchJobDetails("indeed", "fdde406379455a1e");
+console.log(job.title);        // job title
+console.log(job.company);      // company name
+console.log(job.description);  // full description
+```
+
+### fetchJobDetails Parameters
+
+```ts
+fetchJobDetails(
+  site: string,              // Site name (e.g. "indeed", "linkedin", "glassdoor")
+  jobId: string,             // Provider-specific job ID
+  options?: {
+    format?: string;              // "markdown" (default), "html", or "plain"
+    proxies?: string | string[];  // Proxy server(s)
+    country?: string;             // Country code (default: "usa")
+  },
+): Promise<FlatJobRecord | null>
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `site` | `string` | — | Site name: `"indeed"`, `"linkedin"`, `"glassdoor"`, `"zip_recruiter"`, `"bayt"`, `"naukri"`, `"bdjobs"` |
+| `jobId` | `string` | — | Provider-specific job ID (as returned in search results) |
+| `options.format` | `string` | `"markdown"` | Description format: `"markdown"`, `"html"`, or `"plain"` |
+| `options.proxies` | `string \| string[]` | — | Proxy server(s) for the request |
+| `options.country` | `string` | `"usa"` | Country for Indeed/Glassdoor |
+
+### fetchJobDetails Return Value
+
+Returns a `FlatJobRecord` (same shape as search results) or `null` if the job wasn't found. The record includes all available fields for the job:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Prefixed job ID (e.g. `"in-fdde406379455a1e"`) |
+| `site` | `string` | Site name |
+| `title` | `string` | Job title |
+| `company` | `string` | Company name |
+| `description` | `string` | Full job description |
+| `job_url` | `string` | Job listing URL |
+| `location` | `string` | Formatted location |
+| `date_posted` | `string` | When the job was posted |
+| ... | | All other standard `FlatJobRecord` fields |
+
+### fetchJobDetails Supported Sites
+
+| Site | Job ID Format | Notes |
+|------|--------------|-------|
+| `indeed` | Indeed job key (e.g. `"fdde406379455a1e"`) | Fetches full description from job page |
+| `linkedin` | LinkedIn job ID (e.g. `"4127292817"`) | Uses existing LinkedIn detail fetcher |
+| `glassdoor` | Glassdoor listing ID | Requires CSRF token initialization |
+| `zip_recruiter` | ZipRecruiter listing key | Parses full HTML description |
+| `bayt` | Bayt job path (e.g. `"/en/job-title-1234567"`) | Scrapes job detail page |
+| `naukri` | Naukri job ID | Uses REST API |
+| `bdjobs` | BDJobs job ID | Extracts from detail page |
+| `google` | — | Not supported (returns error) |
+| `google_careers` | — | Not supported (returns error) |
 
 ---
 
@@ -636,6 +710,28 @@ const job2 = await fetchLinkedInJob(
 );
 ```
 
+### Fetch Job by ID (Any Provider)
+
+```ts
+import { fetchJobDetails } from "jobspy-js";
+
+// Fetch an Indeed job by ID
+const job = await fetchJobDetails("indeed", "fdde406379455a1e");
+console.log(job.title);       // job title
+console.log(job.description); // full description
+
+// Fetch a Glassdoor job with HTML format
+const job2 = await fetchJobDetails("glassdoor", "123456789", {
+  format: "html",
+  country: "uk",
+});
+
+// Fetch a ZipRecruiter job via proxy
+const job3 = await fetchJobDetails("zip_recruiter", "listing-key", {
+  proxies: "user:pass@proxy.example.com:8080",
+});
+```
+
 ---
 
 ## Error Handling
@@ -675,7 +771,7 @@ Everything exported from `"jobspy-js"`:
 
 ```ts
 // Main functions
-export { scrapeJobs, fetchLinkedInJob } from "./scraper";
+export { scrapeJobs, fetchLinkedInJob, fetchJobDetails } from "./scraper";
 
 // Enums
 export { Site, JobType, CompensationInterval, DescriptionFormat, SalarySource } from "./types";

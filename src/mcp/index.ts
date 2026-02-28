@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { scrapeJobs } from "../scraper";
+import { scrapeJobs, fetchJobDetails } from "../scraper";
 
 const server = new McpServer({
   name: "jobspy",
@@ -72,6 +72,11 @@ server.tool(
       .optional()
       .default(false)
       .describe("Fetch full descriptions from LinkedIn (slower)"),
+    indeed_fetch_description: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Fetch full Indeed pages/descriptions using job_url_direct"),
   },
   async (params) => {
     try {
@@ -88,6 +93,7 @@ server.tool(
         hours_old: params.hours_old,
         description_format: params.description_format,
         linkedin_fetch_description: params.linkedin_fetch_description,
+        indeed_fetch_description: params.indeed_fetch_description,
       });
 
       if (result.jobs.length === 0) {
@@ -142,7 +148,62 @@ server.tool(
     }
   },
 );
-
+server.tool(
+  "fetch_job",
+  "Fetch full details for a single job by its provider-specific ID",
+  {
+    site: z
+      .enum([
+        "linkedin",
+        "indeed",
+        "zip_recruiter",
+        "glassdoor",
+        "google",
+        "bayt",
+        "naukri",
+        "bdjobs",
+      ])
+      .describe("Job board site"),
+    job_id: z.string().describe("Provider-specific job ID"),
+    description_format: z
+      .enum(["markdown", "html", "plain"])
+      .optional()
+      .default("markdown")
+      .describe("Format for job description"),
+  },
+  async (params) => {
+    try {
+      const job = await fetchJobDetails(params.site, params.job_id, {
+        format: params.description_format,
+      });
+      if (!job) {
+        return {
+          content: [
+            { type: "text" as const, text: "Job not found." },
+          ],
+        };
+      }
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(job, null, 2),
+          },
+        ],
+      };
+    } catch (e: any) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error fetching job: ${e.message}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
