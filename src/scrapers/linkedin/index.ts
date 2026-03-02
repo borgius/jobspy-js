@@ -240,7 +240,8 @@ export class LinkedIn extends Scraper {
       );
       if (!response.ok) return {};
       const html = await response.text();
-      if (html.includes("linkedin.com/signup")) return {};
+      // Only bail if it's a true auth-wall redirect (no job content present)
+      if (html.includes("linkedin.com/signup") && !html.includes("show-more-less-html__markup")) return {};
 
       const $ = cheerio.load(html);
 
