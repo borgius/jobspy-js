@@ -15,6 +15,7 @@ Uses [wreq-js](https://github.com/nicehash/wreq-js) for browser TLS fingerprint 
 - **Concurrent scraping** — all sites scraped in parallel
 - **Salary extraction** — parses compensation from descriptions when not provided directly
 - **60+ countries** — Indeed/Glassdoor regional domain support
+- **Credential fallback** — optional per-provider login (env vars or CLI flags) when anonymous scraping is blocked
 
 ## Supported Sites
 
@@ -89,6 +90,14 @@ console.log(job.description);
 | `enforce_annual_salary` | `boolean` | `false` | Convert all salaries to annual |
 | `profile` | `string` | — | Named profile for dedup tracking |
 | `skip_dedup` | `boolean` | `false` | Skip dedup filtering (still updates state) |
+| `use_creds` | `boolean` | `false` | Enable credential fallback when anonymous scraping is blocked (also: `JOBSPY_CREDS=1`) |
+| `credentials` | `ProviderCredentials` | — | Explicit credentials object (see [Authentication](#authentication--credentials)) |
+| `linkedin_username` | `string` | — | LinkedIn username/email (also: `LINKEDIN_USERNAME`) |
+| `linkedin_password` | `string` | — | LinkedIn password (also: `LINKEDIN_PASSWORD`) |
+| `indeed_username` | `string` | — | Indeed username/email (also: `INDEED_USERNAME`) |
+| `indeed_password` | `string` | — | Indeed password (also: `INDEED_PASSWORD`) |
+| `glassdoor_username` | `string` | — | Glassdoor username/email (also: `GLASSDOOR_USERNAME`) |
+| `glassdoor_password` | `string` | — | Glassdoor password (also: `GLASSDOOR_PASSWORD`) |
 
 ### fetchLinkedInJob()
 
@@ -135,8 +144,79 @@ console.log(job.company);      // company name
 Options: `{ format?: "markdown"|"html"|"plain", proxies?: string|string[], country?: string }`
 
 > **Full reference:** See [SDK.md](https://github.com/borgius/jobspy-js/blob/master/SDK.md#fetchjobdetails) for all fields and examples.
+## Authentication / Credentials
 
-## CLI
+All providers support optional authenticated scraping as a fallback for when anonymous access is blocked (e.g. LinkedIn 429s or auth-wall redirects). Credentials are **never used unless explicitly enabled**.
+
+### Enable credential fallback
+
+```bash
+# Via env var
+JOBSPY_CREDS=1 jobspy -s linkedin -q "engineer"
+
+# Via CLI flag
+jobspy -s linkedin -q "engineer" --creds
+```
+
+Or in the SDK:
+
+```ts
+const result = await scrapeJobs({
+  site_name: ["linkedin"],
+  search_term: "engineer",
+  use_creds: true,
+  linkedin_username: process.env.LINKEDIN_USERNAME,
+  linkedin_password: process.env.LINKEDIN_PASSWORD,
+});
+```
+
+### Setting credentials
+
+Credentials are resolved in this priority order (highest wins):
+
+1. **Explicit `credentials` object** in `ScrapeJobsParams`
+2. **Per-field params** (`linkedin_username`, `linkedin_password`, …)
+3. **Environment variables**
+
+#### Environment variables
+
+| Provider | Username env var | Password env var |
+|----------|-----------------|------------------|
+| LinkedIn | `LINKEDIN_USERNAME` | `LINKEDIN_PASSWORD` |
+| Indeed | `INDEED_USERNAME` | `INDEED_PASSWORD` |
+| Glassdoor | `GLASSDOOR_USERNAME` | `GLASSDOOR_PASSWORD` |
+| ZipRecruiter | `ZIPRECRUITER_USERNAME` | `ZIPRECRUITER_PASSWORD` |
+| Bayt | `BAYT_USERNAME` | `BAYT_PASSWORD` |
+| Naukri | `NAUKRI_USERNAME` | `NAUKRI_PASSWORD` |
+| BDJobs | `BDJOBS_USERNAME` | `BDJOBS_PASSWORD` |
+
+#### CLI flags
+
+```bash
+jobspy -s linkedin -q "engineer" --creds \
+  --linkedin-username me@email.com \
+  --linkedin-password secret
+```
+
+#### `jobspy.json` profile
+
+```json
+{
+  "config": {
+    "profiles": {
+      "frontend": {
+        "site": ["linkedin", "indeed"],
+        "search_term": "react developer",
+        "creds": true,
+        "linkedin_username": "me@email.com",
+        "linkedin_password": "secret"
+      }
+    }
+  }
+}
+```
+
+> **Security note:** Prefer environment variables over storing passwords in `jobspy.json`. The state section of that file is committed by some users.
 
 ### Quick Start
 
@@ -160,6 +240,10 @@ jobspy --describe https://www.linkedin.com/jobs/view/4127292817
 # Fetch full job details by ID for any provider
 jobspy -s indeed --id fdde406379455a1e
 jobspy -s glassdoor --id 123456789
+
+# Use credential fallback (anonymous scraping blocked)
+JOBSPY_CREDS=1 LINKEDIN_USERNAME=me@email.com LINKEDIN_PASSWORD=secret jobspy -s linkedin -q "engineer"
+jobspy -s linkedin -q "engineer" --creds --linkedin-username me@email.com --linkedin-password secret
 ```
 
 ### All CLI Options
@@ -193,6 +277,20 @@ jobspy -s glassdoor --id 123456789
 | `--init` | | — | Generate a `jobspy.json` with sample profiles |
 | `--describe <jobId>` | | — | Fetch full LinkedIn job details by ID or URL |
 | `--id <jobId>` | | — | Fetch full job details by ID (requires `-s/--site`) |
+| **Credentials** | | | |
+| `--creds` | | `false` | Enable credential fallback when anonymous scraping is blocked (also: `JOBSPY_CREDS=1`) |
+| `--linkedin-username <user>` | | — | LinkedIn username/email (also: `LINKEDIN_USERNAME`) |
+| `--linkedin-password <pass>` | | — | LinkedIn password (also: `LINKEDIN_PASSWORD`) |
+| `--indeed-username <user>` | | — | Indeed username/email (also: `INDEED_USERNAME`) |
+| `--indeed-password <pass>` | | — | Indeed password (also: `INDEED_PASSWORD`) |
+| `--glassdoor-username <user>` | | — | Glassdoor username/email (also: `GLASSDOOR_USERNAME`) |
+| `--glassdoor-password <pass>` | | — | Glassdoor password (also: `GLASSDOOR_PASSWORD`) |
+| `--ziprecruiter-username <user>` | | — | ZipRecruiter username/email (also: `ZIPRECRUITER_USERNAME`) |
+| `--ziprecruiter-password <pass>` | | — | ZipRecruiter password (also: `ZIPRECRUITER_PASSWORD`) |
+| `--bayt-username <user>` | | — | Bayt username/email (also: `BAYT_USERNAME`) |
+| `--bayt-password <pass>` | | — | Bayt password (also: `BAYT_PASSWORD`) |
+| `--naukri-username <user>` | | — | Naukri username/email (also: `NAUKRI_USERNAME`) |
+| `--naukri-password <pass>` | | — | Naukri password (also: `NAUKRI_PASSWORD`) |
 
 ## Config File (`jobspy.json`)
 
@@ -275,6 +373,13 @@ Each profile in `config.profiles` supports the following keys:
 | `enforce_annual_salary` | `boolean` | Normalize salaries to annual |
 | `verbose` | `number` | Log verbosity level |
 | `output` | `string` | Output file path |
+| `creds` | `boolean` | Enable credential fallback (also: `JOBSPY_CREDS=1`) |
+| `linkedin_username` | `string` | LinkedIn username/email (also: `LINKEDIN_USERNAME`) |
+| `linkedin_password` | `string` | LinkedIn password (also: `LINKEDIN_PASSWORD`) |
+| `indeed_username` | `string` | Indeed username/email (also: `INDEED_USERNAME`) |
+| `indeed_password` | `string` | Indeed password (also: `INDEED_PASSWORD`) |
+| `glassdoor_username` | `string` | Glassdoor username/email (also: `GLASSDOOR_USERNAME`) |
+| `glassdoor_password` | `string` | Glassdoor password (also: `GLASSDOOR_PASSWORD`) |
 
 ### Running Profiles
 
@@ -441,6 +546,7 @@ npm test
 src/
 ├── index.ts              # SDK entry point
 ├── scraper.ts            # Main scrapeJobs() orchestrator
+├── credentials.ts        # Credential loader (env → params → object merge)
 ├── state.ts              # Profile state, dedup logic, file I/O
 ├── types.ts              # All types, enums, country config
 ├── utils.ts              # Logger, proxy rotation, HTML helpers
@@ -449,7 +555,7 @@ src/
 └── scrapers/
     ├── base.ts           # Abstract Scraper base class
     ├── indeed/           # GraphQL API
-    ├── linkedin/         # HTML scraping
+    ├── linkedin/         # HTML scraping + optional login fallback
     ├── glassdoor/        # GraphQL API
     ├── google/           # Playwright headless Chrome
     ├── google-careers/   # Plain HTTP; AF_initDataCallback JSON parsing
