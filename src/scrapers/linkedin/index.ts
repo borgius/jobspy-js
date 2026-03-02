@@ -7,6 +7,7 @@ import {
   type ScraperInput,
   type Compensation,
   type Location,
+  type ProviderCredentials,
   Site,
   JobType,
   DescriptionFormat,
@@ -38,9 +39,75 @@ export class LinkedIn extends Scraper {
   private bandDelay = 4;
   private scraper_input!: ScraperInput;
   private urlRegex = /(?<=\?url=)[^"]+/;
+  private loggedIn = false;
 
-  constructor(options: { proxies?: string | string[] | null } = {}) {
+  constructor(options: { proxies?: string | string[] | null; credentials?: ProviderCredentials; useCreds?: boolean } = {}) {
     super(Site.LINKEDIN, options);
+  }
+
+  /**
+   * Attempt to log in to LinkedIn using username/password.
+   * Sets session cookies so subsequent requests are authenticated.
+   * Returns true if login appeared successful.
+   */
+  private async tryLogin(): Promise<boolean> {
+    if (this.loggedIn) return true;
+    const creds = this.providerCreds;
+    if (!creds) {
+      log.warn("LinkedIn credentials not configured – skipping login");
+      return false;
+    }
+    try {
+      log.info("Attempting LinkedIn login…");
+      // Step 1: fetch login page to extract CSRF token
+      const loginPage = await this.session.fetch(`${this.baseUrl}/login`, {
+        headers: { ...HEADERS, "Accept": "text/html" },
+        timeout: 10000,
+      } as any);
+      const loginHtml = await loginPage.text();
+      const $lp = cheerio.load(loginHtml);
+      const csrfToken =
+        $lp('input[name="loginCsrfParam"]').val() as string | undefined ??
+        $lp('input[name="csrf_token"]').val() as string | undefined ?? "";
+
+      // Step 2: POST credentials
+      const body = new URLSearchParams({
+        session_key: creds.username,
+        session_password: creds.password,
+        loginCsrfParam: csrfToken,
+        isJsCallOnLoadFuncExecuted: "false",
+        _d: "d",
+      });
+      const resp = await this.session.fetch(
+        `${this.baseUrl}/checkpoint/lg/login-submit`,
+        {
+          method: "POST",
+          headers: {
+            ...HEADERS,
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Referer": `${this.baseUrl}/login`,
+          },
+          body: body.toString(),
+          timeout: 15000,
+        } as any,
+      );
+      const respHtml = await resp.text();
+      // If we're redirected away from /login and no error is shown, treat as success
+      const loginFailed =
+        respHtml.includes("There was a problem with your login") ||
+        respHtml.includes("Hmm, that's not the right password") ||
+        respHtml.includes("challenge/");
+      if (loginFailed) {
+        log.error("LinkedIn login failed – check credentials");
+        return false;
+      }
+      log.info("LinkedIn login succeeded");
+      this.loggedIn = true;
+      return true;
+    } catch (e: any) {
+      log.error(`LinkedIn login error: ${e.message}`);
+      return false;
+    }
   }
 
   async scrape(input: ScraperInput): Promise<JobResponse> {
@@ -89,6 +156,11 @@ export class LinkedIn extends Scraper {
         if (!response.ok) {
           if (response.status === 429) {
             log.error("429 Response - Blocked by LinkedIn for too many requests");
+            if (this.useCreds && !this.loggedIn) {
+              log.info("Attempting login fallback after 429…");
+              const ok = await this.tryLogin();
+              if (ok) continue;  // retry this page with authenticated session
+            }
           } else {
             log.error(`LinkedIn response status code ${response.status}`);
           }
@@ -241,9 +313,33 @@ export class LinkedIn extends Scraper {
       if (!response.ok) return {};
       const html = await response.text();
       // Only bail if it's a true auth-wall redirect (no job content present)
-      if (html.includes("linkedin.com/signup") && !html.includes("show-more-less-html__markup")) return {};
+      if (html.includes("linkedin.com/signup") && !html.includes("show-more-less-html__markup")) {
+        if (this.useCreds && !this.loggedIn) {
+          log.info("Auth-wall detected – attempting login fallback…");
+          const ok = await this.tryLogin();
+          if (ok) {
+            // Retry the same job detail request after authentication
+            const retryResp = await this.session.fetch(
+              `${this.baseUrl}/jobs/view/${jobId}`,
+              { headers: HEADERS, timeout: 5000 } as any,
+            );
+            if (!retryResp.ok) return {};
+            return this._parseJobDetailsHtml(await retryResp.text());
+          }
+        }
+        return {};
+      }
+      return this._parseJobDetailsHtml(html);
+    } catch {
+      return {};
+    }
+  }
 
+  private _parseJobDetailsHtml(html: string): Record<string, any> {
+    try {
       const $ = cheerio.load(html);
+      // Early exit if still behind auth wall
+      if (html.includes("linkedin.com/signup") && !html.includes("show-more-less-html__markup")) return {};
 
       // Description
       let description: string | undefined;

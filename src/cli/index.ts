@@ -61,6 +61,20 @@ program
   .option("--init", "Generate a jobspy.json with sample profiles")
   .option("--describe <jobId>", "Fetch full LinkedIn job details by ID or URL")
   .option("--id <jobId>", "Fetch full job details by ID (requires -s/--site)")
+  // ── Credentials ──────────────────────────────────────────────────────────
+  .option("--creds", "Use stored/env credentials as fallback when anonymous scraping is blocked (also: JOBSPY_CREDS=1)")
+  .option("--linkedin-username <user>", "LinkedIn username/email (also: LINKEDIN_USERNAME)")
+  .option("--linkedin-password <pass>", "LinkedIn password (also: LINKEDIN_PASSWORD)")
+  .option("--indeed-username <user>", "Indeed username/email (also: INDEED_USERNAME)")
+  .option("--indeed-password <pass>", "Indeed password (also: INDEED_PASSWORD)")
+  .option("--glassdoor-username <user>", "Glassdoor username/email (also: GLASSDOOR_USERNAME)")
+  .option("--glassdoor-password <pass>", "Glassdoor password (also: GLASSDOOR_PASSWORD)")
+  .option("--ziprecruiter-username <user>", "ZipRecruiter username/email (also: ZIPRECRUITER_USERNAME)")
+  .option("--ziprecruiter-password <pass>", "ZipRecruiter password (also: ZIPRECRUITER_PASSWORD)")
+  .option("--bayt-username <user>", "Bayt username/email (also: BAYT_USERNAME)")
+  .option("--bayt-password <pass>", "Bayt password (also: BAYT_PASSWORD)")
+  .option("--naukri-username <user>", "Naukri username/email (also: NAUKRI_USERNAME)")
+  .option("--naukri-password <pass>", "Naukri password (also: NAUKRI_PASSWORD)")
   .action(async (opts) => {
     if (opts.init) {
       const filePath = resolve(process.cwd(), "jobspy.json");
@@ -91,6 +105,12 @@ program
               enforce_annual_salary: true,
               verbose: 1,
               output: "frontend-jobs.csv",
+              // Credentials (optional – enable with creds:true or env JOBSPY_CREDS=1)
+              // creds: false,
+              // linkedin_username: "",
+              // linkedin_password: "",
+              // indeed_username: "",
+              // indeed_password: "",
             },
             backend: {
               site: ["linkedin", "indeed", "zip_recruiter", "glassdoor", "google", "bayt", "naukri", "bdjobs"],
@@ -112,6 +132,12 @@ program
               enforce_annual_salary: true,
               verbose: 1,
               output: "backend-jobs.json",
+              // Credentials (optional – enable with creds:true or env JOBSPY_CREDS=1)
+              // creds: false,
+              // linkedin_username: "",
+              // linkedin_password: "",
+              // indeed_username: "",
+              // indeed_password: "",
             },
           },
         },
@@ -225,6 +251,20 @@ program
       output: opts.output ?? cfg.output ?? undefined,
       profile: opts.profile,
       all: opts.all ?? false,
+      // Credentials
+      creds: opts.creds ?? cfg.creds ?? false,
+      linkedinUsername: opts.linkedinUsername ?? cfg.linkedin_username ?? undefined,
+      linkedinPassword: opts.linkedinPassword ?? cfg.linkedin_password ?? undefined,
+      indeedUsername: opts.indeedUsername ?? cfg.indeed_username ?? undefined,
+      indeedPassword: opts.indeedPassword ?? cfg.indeed_password ?? undefined,
+      glassdoorUsername: opts.glassdoorUsername ?? cfg.glassdoor_username ?? undefined,
+      glassdoorPassword: opts.glassdoorPassword ?? cfg.glassdoor_password ?? undefined,
+      ziprecruiterUsername: opts.ziprecruiterUsername ?? cfg.ziprecruiter_username ?? undefined,
+      ziprecruiterPassword: opts.ziprecruiterPassword ?? cfg.ziprecruiter_password ?? undefined,
+      baytUsername: opts.baytUsername ?? cfg.bayt_username ?? undefined,
+      baytPassword: opts.baytPassword ?? cfg.bayt_password ?? undefined,
+      naukriUsername: opts.naukriUsername ?? cfg.naukri_username ?? undefined,
+      naukriPassword: opts.naukriPassword ?? cfg.naukri_password ?? undefined,
     };
 
     if (o.all && !o.profile) {
@@ -252,6 +292,20 @@ program
         verbose: parseInt(o.verbose),
         profile: o.profile,
         skip_dedup: o.all,
+        // Credentials
+        use_creds: o.creds || undefined,
+        linkedin_username: o.linkedinUsername,
+        linkedin_password: o.linkedinPassword,
+        indeed_username: o.indeedUsername,
+        indeed_password: o.indeedPassword,
+        glassdoor_username: o.glassdoorUsername,
+        glassdoor_password: o.glassdoorPassword,
+        ziprecruiter_username: o.ziprecruiterUsername,
+        ziprecruiter_password: o.ziprecruiterPassword,
+        bayt_username: o.baytUsername,
+        bayt_password: o.baytPassword,
+        naukri_username: o.naukriUsername,
+        naukri_password: o.naukriPassword,
       });
 
       console.log(`Found ${result.jobs.length} jobs`);

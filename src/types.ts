@@ -170,6 +170,26 @@ export interface JobResponse {
   jobs: JobPost[];
 }
 
+/** Username/password pair for a single provider. */
+export interface ProviderCreds {
+  username: string;
+  password: string;
+}
+
+/**
+ * Optional credentials for each supported provider.
+ * Values come from env vars, CLI flags, or jobspy.json profile config.
+ */
+export interface ProviderCredentials {
+  linkedin?: ProviderCreds;
+  indeed?: ProviderCreds;
+  glassdoor?: ProviderCreds;
+  zip_recruiter?: ProviderCreds;
+  bayt?: ProviderCreds;
+  naukri?: ProviderCreds;
+  bdjobs?: ProviderCreds;
+}
+
 export interface ScraperInput {
   site_type: Site[];
   search_term?: string;
@@ -187,6 +207,10 @@ export interface ScraperInput {
   description_format?: DescriptionFormat;
   results_wanted?: number;
   hours_old?: number;
+  /** Whether to attempt authenticated scraping when anonymous is blocked. */
+  use_creds?: boolean;
+  /** Provider credentials resolved from env vars / CLI flags. */
+  credentials?: ProviderCredentials;
 }
 
 export interface ScrapeJobsParams {
@@ -209,6 +233,31 @@ export interface ScrapeJobsParams {
   hours_old?: number;
   enforce_annual_salary?: boolean;
   verbose?: number;
+
+  // Credentials & auth
+  /**
+   * Enable authenticated scraping fallback when anonymous is blocked.
+   * Can also be set via env `JOBSPY_CREDS=1`.
+   */
+  use_creds?: boolean;
+  /** Pre-built credentials object (takes precedence over per-field values below). */
+  credentials?: ProviderCredentials;
+
+  // Per-provider credential fields (merged with env vars by loadCredentials())
+  linkedin_username?: string;
+  linkedin_password?: string;
+  indeed_username?: string;
+  indeed_password?: string;
+  glassdoor_username?: string;
+  glassdoor_password?: string;
+  ziprecruiter_username?: string;
+  ziprecruiter_password?: string;
+  bayt_username?: string;
+  bayt_password?: string;
+  naukri_username?: string;
+  naukri_password?: string;
+  bdjobs_username?: string;
+  bdjobs_password?: string;
 
   // Profile / state
   profile?: string;

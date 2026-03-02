@@ -3,6 +3,7 @@ import {
   type ScraperInput,
   type JobPost,
   type JobResponse,
+  type ProviderCredentials,
   Site,
   JobType,
   DescriptionFormat,
@@ -12,6 +13,7 @@ import {
   DESIRED_COLUMNS,
 } from "./types";
 import { setLogLevel, extractSalary, convertToAnnual } from "./utils";
+import { loadCredentials, shouldUseCreds } from "./credentials";
 import { Indeed } from "./scrapers/indeed";
 import { LinkedIn } from "./scrapers/linkedin";
 import { Glassdoor } from "./scrapers/glassdoor";
@@ -31,7 +33,7 @@ import {
   type ProfileState,
 } from "./state";
 
-const SCRAPER_MAP: Record<Site, new (opts: { proxies?: string | string[] | null }) => Scraper> = {
+const SCRAPER_MAP: Record<Site, new (opts: { proxies?: string | string[] | null; credentials?: ProviderCredentials; useCreds?: boolean }) => Scraper> = {
   [Site.INDEED]: Indeed,
   [Site.LINKEDIN]: LinkedIn,
   [Site.GLASSDOOR]: Glassdoor,
@@ -173,6 +175,9 @@ export async function scrapeJobs(
     hours_old: params.hours_old,
   };
 
+  const useCreds = shouldUseCreds(params);
+  const credentials = loadCredentials(params);
+
   const proxies = params.proxies
     ? typeof params.proxies === "string"
       ? [params.proxies]
@@ -183,7 +188,7 @@ export async function scrapeJobs(
   const results = await Promise.allSettled(
     sites.map(async (site) => {
       const ScraperClass = SCRAPER_MAP[site];
-      const scraper = new ScraperClass({ proxies });
+      const scraper = new ScraperClass({ proxies, credentials, useCreds });
       try {
         const response = await scraper.scrape(scraperInput);
         return { site: site as string, response };
@@ -369,13 +374,13 @@ export interface LinkedInJobDetails {
 export async function fetchJobDetails(
   site: string,
   jobId: string,
-  options: { format?: string; proxies?: string | string[]; country?: string } = {},
+  options: { format?: string; proxies?: string | string[]; country?: string; credentials?: ProviderCredentials; useCreds?: boolean } = {},
 ): Promise<FlatJobRecord | null> {
   const siteEnum = mapStrToSite(site);
   const ScraperClass = SCRAPER_MAP[siteEnum];
   if (!ScraperClass) throw new Error(`Unknown site: ${site}`);
 
-  const scraper = new ScraperClass({ proxies: options.proxies });
+  const scraper = new ScraperClass({ proxies: options.proxies, credentials: options.credentials, useCreds: options.useCreds });
   const format = (options.format as DescriptionFormat) ?? DescriptionFormat.MARKDOWN;
 
   try {
